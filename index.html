@@ -21,7 +21,9 @@
     --cached: #3a6b52;
     --buffered: #4a5568;
   }
+
   * { box-sizing: border-box; }
+
   body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -31,9 +33,26 @@
     display: flex;
     justify-content: center;
   }
-  .app { width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 16px; }
-  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
-  .subtitle { color: var(--text-dim); font-size: 13px; margin: 0 0 8px; }
+
+  .app {
+    width: 100%;
+    max-width: 900px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 13px;
+    margin: 0 0 8px;
+  }
 
   .panel {
     background: var(--panel);
@@ -42,7 +61,11 @@
     padding: 16px;
   }
 
-  .load-row { display: flex; gap: 8px; }
+  .load-row {
+    display: flex;
+    gap: 8px;
+  }
+
   #urlInput {
     flex: 1;
     background: #0f1115;
@@ -52,7 +75,12 @@
     border-radius: 8px;
     font-size: 14px;
   }
-  #urlInput:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+
+  #urlInput:focus {
+    outline: 2px solid var(--accent);
+    border-color: var(--accent);
+  }
+
   button {
     background: var(--accent);
     color: white;
@@ -63,8 +91,16 @@
     font-weight: 600;
     cursor: pointer;
   }
-  button:disabled { background: var(--accent-dim); cursor: not-allowed; }
-  button:focus-visible { outline: 2px solid white; outline-offset: 2px; }
+
+  button:disabled {
+    background: var(--accent-dim);
+    cursor: not-allowed;
+  }
+
+  button:focus-visible {
+    outline: 2px solid white;
+    outline-offset: 2px;
+  }
 
   video {
     width: 100%;
@@ -73,7 +109,10 @@
     display: block;
     outline: none;
   }
-  video:focus-visible { outline: 2px solid var(--accent); }
+
+  video:focus-visible {
+    outline: 2px solid var(--accent);
+  }
 
   .meta-row {
     display: flex;
@@ -82,14 +121,31 @@
     gap: 12px;
     flex-wrap: wrap;
   }
-  #videoTitle { font-size: 16px; font-weight: 600; margin: 0; }
-  #timeReadout { color: var(--text-dim); font-size: 13px; white-space: nowrap; }
 
-  .coverage-wrap { margin-top: 10px; }
-  .coverage-label {
-    display: flex; justify-content: space-between;
-    font-size: 12px; color: var(--text-dim); margin-bottom: 4px;
+  #videoTitle {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
   }
+
+  #timeReadout {
+    color: var(--text-dim);
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .coverage-wrap {
+    margin-top: 10px;
+  }
+
+  .coverage-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+
   .coverage-track {
     position: relative;
     height: 10px;
@@ -98,13 +154,51 @@
     overflow: hidden;
     cursor: pointer;
   }
-  .coverage-track > div { position: absolute; top: 0; bottom: 0; left: 0; }
-  #coverageCached { background: var(--cached); z-index: 1; }
-  #coverageBuffered { background: var(--buffered); z-index: 2; opacity: 0.85; }
-  #coveragePlayed { background: var(--played); z-index: 3; width: 2px; }
-  .legend { display: flex; gap: 14px; font-size: 11px; color: var(--text-dim); margin-top: 6px; }
-  .legend span { display: inline-flex; align-items: center; gap: 5px; }
-  .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+  .coverage-track > div {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+  }
+
+  #coverageCached {
+    background: var(--cached);
+    z-index: 1;
+  }
+
+  #coverageBuffered {
+    background: var(--buffered);
+    z-index: 2;
+    opacity: 0.85;
+  }
+
+  #coveragePlayed {
+    background: var(--played);
+    z-index: 3;
+    width: 2px;
+  }
+
+  .legend {
+    display: flex;
+    gap: 14px;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 6px;
+  }
+
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    display: inline-block;
+  }
 
   .status-grid {
     display: grid;
@@ -113,16 +207,46 @@
     margin-top: 12px;
     font-size: 13px;
   }
-  .status-item { display: flex; flex-direction: column; gap: 2px; }
-  .status-item .k { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
-  .status-item .v { font-weight: 600; }
-  .pill {
-    display: inline-block; padding: 2px 8px; border-radius: 999px;
-    font-size: 11px; font-weight: 600;
+
+  .status-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
-  .pill.ok { background: rgba(76,175,125,0.15); color: var(--ok); }
-  .pill.warn { background: rgba(224,166,60,0.15); color: var(--warn); }
-  .pill.err { background: rgba(224,86,60,0.15); color: var(--err); }
+
+  .status-item .k {
+    color: var(--text-dim);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .status-item .v {
+    font-weight: 600;
+  }
+
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .pill.ok {
+    background: rgba(76,175,125,0.15);
+    color: var(--ok);
+  }
+
+  .pill.warn {
+    background: rgba(224,166,60,0.15);
+    color: var(--warn);
+  }
+
+  .pill.err {
+    background: rgba(224,86,60,0.15);
+    color: var(--err);
+  }
 
   #errorArea {
     display: none;
@@ -133,24 +257,47 @@
     border-radius: 8px;
     font-size: 13px;
   }
-  .note { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+
+  .note {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
   kbd {
-    background: #0f1115; border: 1px solid var(--panel-border);
-    border-radius: 4px; padding: 1px 6px; font-size: 11px;
+    background: #0f1115;
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
   }
 </style>
 </head>
+
 <body>
+
 <div class="app">
+
   <div>
     <h1>Local Video Player</h1>
-    <p class="subtitle">Streams through the local Python server &mdash; no YouTube API, no embed, no iframe.</p>
+    <p class="subtitle">
+      Streams through the remote Python server &mdash; no YouTube API, no embed, no iframe.
+    </p>
   </div>
 
   <div class="panel">
     <div class="load-row">
-      <label for="urlInput" style="position:absolute; left:-9999px;">YouTube video URL</label>
-      <input id="urlInput" type="text" placeholder="Paste a YouTube video URL..." autocomplete="off" />
+      <label for="urlInput" style="position:absolute; left:-9999px;">
+        YouTube video URL
+      </label>
+
+      <input
+        id="urlInput"
+        type="text"
+        placeholder="Paste a YouTube video URL..."
+        autocomplete="off"
+      />
+
       <button id="loadBtn">Load Video</button>
     </div>
   </div>
@@ -158,7 +305,13 @@
   <div id="errorArea" role="alert"></div>
 
   <div class="panel">
-    <video id="player" controls preload="auto" tabindex="0"></video>
+
+    <video
+      id="player"
+      controls
+      preload="auto"
+      tabindex="0"
+    ></video>
 
     <div class="meta-row">
       <h2 id="videoTitle" style="display:none;"></h2>
@@ -166,436 +319,1741 @@
     </div>
 
     <div class="coverage-wrap">
+
       <div class="coverage-label">
         <span>Download coverage</span>
         <span id="coverageText">&mdash;</span>
       </div>
-      <div class="coverage-track" id="coverageTrack" role="slider" aria-label="Seek and view download coverage"
-           aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+
+      <div
+        class="coverage-track"
+        id="coverageTrack"
+        role="slider"
+        aria-label="Seek and view download coverage"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow="0"
+        tabindex="0"
+      >
         <div id="coverageCached" style="width:0%"></div>
         <div id="coverageBuffered" style="width:0%"></div>
         <div id="coveragePlayed" style="left:0%"></div>
       </div>
+
       <div class="legend">
-        <span><span class="swatch" style="background:var(--cached)"></span>Cached on server</span>
-        <span><span class="swatch" style="background:var(--buffered)"></span>Buffered in browser</span>
-        <span><span class="swatch" style="background:var(--played)"></span>Playback position</span>
+        <span>
+          <span
+            class="swatch"
+            style="background:var(--cached)"
+          ></span>
+          Cached on server
+        </span>
+
+        <span>
+          <span
+            class="swatch"
+            style="background:var(--buffered)"
+          ></span>
+          Buffered in browser
+        </span>
+
+        <span>
+          <span
+            class="swatch"
+            style="background:var(--played)"
+          ></span>
+          Playback position
+        </span>
       </div>
+
     </div>
 
     <div class="status-grid">
+
       <div class="status-item">
         <span class="k">Server / connection</span>
         <span class="v" id="statConn">Idle</span>
       </div>
+
       <div class="status-item">
         <span class="k">Playback state</span>
         <span class="v" id="statPlayback">&mdash;</span>
       </div>
+
       <div class="status-item">
         <span class="k">Buffering</span>
         <span class="v" id="statBuffering">No</span>
       </div>
+
       <div class="status-item">
         <span class="k">Download</span>
         <span class="v" id="statDownload">&mdash;</span>
       </div>
+
       <div class="status-item">
         <span class="k">Download rate</span>
         <span class="v" id="statRate">&mdash;</span>
       </div>
+
       <div class="status-item">
         <span class="k">Source mode</span>
         <span class="v" id="statMode">&mdash;</span>
       </div>
+
     </div>
   </div>
 
   <div class="panel note">
+
     <strong>Keyboard controls:</strong>
-    <kbd>&larr;</kbd> seek back 5s, <kbd>&rarr;</kbd> seek forward 5s (disabled while typing in the URL box),
-    <kbd>space</kbd> play/pause when the player is focused.
+
+    <kbd>&larr;</kbd>
+    seek back 5s,
+
+    <kbd>&rarr;</kbd>
+    seek forward 5s
+
+    (disabled while typing in the URL box),
+
+    <kbd>space</kbd>
+    play/pause when the player is focused.
+
     <br /><br />
-    <strong>About the numbers above:</strong> when the selected video source exposes an exact byte size,
-    the download percentage is calculated as <em>downloaded bytes &divide; total bytes</em> and labeled
-    &ldquo;exact&rdquo;. When only an estimate is available it is labeled &ldquo;estimated&rdquo;, and when
-    no size information exists at all it shows &ldquo;unknown&rdquo; rather than a misleading number.
-    Download coverage (green) is separate from what your browser has actually buffered (grey) and from
-    your current playback position (blue).
+
+    <strong>About the numbers above:</strong>
+
+    when the selected video source exposes an exact byte size,
+    the download percentage is calculated as
+    <em>downloaded bytes &divide; total bytes</em>
+    and labeled &ldquo;exact&rdquo;.
+
+    When only an estimate is available it is labeled
+    &ldquo;estimated&rdquo;,
+
+    and when no size information exists at all it shows
+    &ldquo;unknown&rdquo;
+
+    rather than a misleading number.
+
+    Download coverage (green) is separate from what your browser has
+    actually buffered (grey) and from your current playback position (blue).
+
   </div>
+
 </div>
 
 <script>
 (function(){
   "use strict";
-  const $=id=>document.getElementById(id);
-  const urlInput=$("urlInput"), loadBtn=$("loadBtn"), player=$("player");
-  const videoTitle=$("videoTitle"), timeReadout=$("timeReadout"), errorArea=$("errorArea");
-  const coverageCached=$("coverageCached"), coverageBuffered=$("coverageBuffered"), coveragePlayed=$("coveragePlayed"), coverageText=$("coverageText");
-  const statConn=$("statConn"), statPlayback=$("statPlayback"), statBuffering=$("statBuffering"), statDownload=$("statDownload"), statRate=$("statRate"), statMode=$("statMode");
 
-  let videoId=null, duration=0, poll=null;
+  /*
+   * ============================================================
+   * RENDER BACKEND URL
+   * ============================================================
+   *
+   * Replace this with the URL Render gave you.
+   *
+   * Example:
+   *
+   * const API_BASE = "https://youtube-player-v13.onrender.com";
+   *
+   * Do NOT put a trailing slash at the end.
+   *
+   * ============================================================
+   */
+
+  const API_BASE = "https://youtube-player-ixer.onrender.com";
+
+  const $=id=>document.getElementById(id);
+
+  const urlInput=$("urlInput");
+  const loadBtn=$("loadBtn");
+  const player=$("player");
+
+  const videoTitle=$("videoTitle");
+  const timeReadout=$("timeReadout");
+  const errorArea=$("errorArea");
+
+  const coverageCached=$("coverageCached");
+  const coverageBuffered=$("coverageBuffered");
+  const coveragePlayed=$("coveragePlayed");
+  const coverageText=$("coverageText");
+
+  const statConn=$("statConn");
+  const statPlayback=$("statPlayback");
+  const statBuffering=$("statBuffering");
+  const statDownload=$("statDownload");
+  const statRate=$("statRate");
+  const statMode=$("statMode");
+
+  let videoId=null;
+  let duration=0;
+  let poll=null;
+
   let chunks=[];
-  let mediaSource=null, sourceBuffer=null, objectUrl=null;
-  let mime="video/mp4; codecs=\"avc1.4d401f,mp4a.40.2\"";
-  let appendQueue=[], appendBusy=false, sessionToken=0;
-  let desiredTime=0, desiredAutoplay=true;
-  let fullAttached=false, rebuilding=false;
+
+  let mediaSource=null;
+  let sourceBuffer=null;
+  let objectUrl=null;
+
+  let mime='video/mp4; codecs="avc1.4d401f,mp4a.40.2"';
+
+  let appendQueue=[];
+  let appendBusy=false;
+
+  let sessionToken=0;
+
+  let desiredTime=0;
+  let desiredAutoplay=true;
+
+  let fullAttached=false;
+  let rebuilding=false;
+
   let pendingSeekTarget=null;
-  let internalSeekTarget=null, internalSeekUntil=0;
-  let attachGeneration=0, seekGeneration=0;
-  let lastAttachedChunk=null, lastAttachedTarget=null;
+
+  let internalSeekTarget=null;
+  let internalSeekUntil=0;
+
+  let attachGeneration=0;
+  let seekGeneration=0;
+
+  let lastAttachedChunk=null;
+  let lastAttachedTarget=null;
+
   let currentAppendEnd=0;
   let lastPlaybackChunk=null;
 
-  function dbg(...args){ console.log("[PLAYER]", ...args); }
+
+  function dbg(...args){
+    console.log("[PLAYER]", ...args);
+  }
+
+
   function dbgChunk(c,event,extra=""){
     if(!c)return;
-    console.log(`[PLAYER][CHUNK ${c.index}] ${event} ${c.start.toFixed(3)}s -> ${c.end.toFixed(3)}s${extra?"  "+extra:""}`);
+
+    console.log(
+      `[PLAYER][CHUNK ${c.index}] ${event} ` +
+      `${c.start.toFixed(3)}s -> ${c.end.toFixed(3)}s` +
+      `${extra?"  "+extra:""}`
+    );
   }
+
+
   function debugPlaybackSection(){
-    if(fullAttached || !chunks.length || !isFinite(player.currentTime))return;
+
+    if(
+      fullAttached ||
+      !chunks.length ||
+      !isFinite(player.currentTime)
+    ){
+      return;
+    }
+
     const t=player.currentTime;
-    const c=chunks.find(x=>x.status==="complete" && x.start-0.05<=t && t<x.end+0.05);
+
+    const c=chunks.find(
+      x =>
+        x.status==="complete" &&
+        x.start-0.05<=t &&
+        t<x.end+0.05
+    );
+
     if(c && lastPlaybackChunk!==c.index){
+
       lastPlaybackChunk=c.index;
-      dbgChunk(c,"PLAYBACK ENTER",`videoTime=${t.toFixed(3)}s paused=${player.paused}`);
+
+      dbgChunk(
+        c,
+        "PLAYBACK ENTER",
+        `videoTime=${t.toFixed(3)}s paused=${player.paused}`
+      );
+
       debugTimelineSnapshot(`entered chunk ${c.index}`);
     }
   }
 
-  function fmtTime(t){if(!isFinite(t)||t<0)t=0;const m=Math.floor(t/60),s=Math.floor(t%60);return `${m}:${String(s).padStart(2,"0")}`;}
-  function fmtBytes(n){if(!n)return "0 B";let x=n,u="B";if(x>=1024){x/=1024;u="KiB"}if(x>=1024){x/=1024;u="MiB"}if(x>=1024){x/=1024;u="GiB"}return `${x.toFixed(1)} ${u}`;}
-  function showError(x){errorArea.textContent=x;errorArea.style.display="block";}
-  function clearError(){errorArea.textContent="";errorArea.style.display="none";}
-  async function post(path,data){const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||`${r.status}`);return j;}
+
+  function fmtTime(t){
+
+    if(!isFinite(t)||t<0)t=0;
+
+    const m=Math.floor(t/60);
+    const s=Math.floor(t%60);
+
+    return `${m}:${String(s).padStart(2,"0")}`;
+  }
+
+
+  function fmtBytes(n){
+
+    if(!n)return "0 B";
+
+    let x=n;
+    let u="B";
+
+    if(x>=1024){
+      x/=1024;
+      u="KiB";
+    }
+
+    if(x>=1024){
+      x/=1024;
+      u="MiB";
+    }
+
+    if(x>=1024){
+      x/=1024;
+      u="GiB";
+    }
+
+    return `${x.toFixed(1)} ${u}`;
+  }
+
+
+  function showError(x){
+
+    errorArea.textContent=x;
+    errorArea.style.display="block";
+  }
+
+
+  function clearError(){
+
+    errorArea.textContent="";
+    errorArea.style.display="none";
+  }
+
+
+  async function post(path,data){
+
+    const r=await fetch(
+      API_BASE + path,
+      {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json"
+        },
+        body:JSON.stringify(data)
+      }
+    );
+
+    const j=await r.json().catch(()=>({}));
+
+    if(!r.ok){
+      throw new Error(j.error||`${r.status}`);
+    }
+
+    return j;
+  }
+
 
   function destroyMSE(){
-    appendQueue.forEach(x=>x.reject?.(new Error("MSE reset")));
-    appendQueue=[]; appendBusy=false; currentAppendEnd=0;
-    if(sourceBuffer){try{sourceBuffer.abort();}catch(_){} }
-    if(mediaSource && mediaSource.readyState==="open"){
-      try{if(sourceBuffer)mediaSource.removeSourceBuffer(sourceBuffer);}catch(_){}
+
+    appendQueue.forEach(
+      x=>x.reject?.(new Error("MSE reset"))
+    );
+
+    appendQueue=[];
+    appendBusy=false;
+    currentAppendEnd=0;
+
+    if(sourceBuffer){
+      try{
+        sourceBuffer.abort();
+      }catch(_){}
     }
-    sourceBuffer=null; mediaSource=null;
-    if(objectUrl){URL.revokeObjectURL(objectUrl);objectUrl=null;}
+
+    if(
+      mediaSource &&
+      mediaSource.readyState==="open"
+    ){
+      try{
+        if(sourceBuffer){
+          mediaSource.removeSourceBuffer(sourceBuffer);
+        }
+      }catch(_){}
+    }
+
+    sourceBuffer=null;
+    mediaSource=null;
+
+    if(objectUrl){
+      URL.revokeObjectURL(objectUrl);
+      objectUrl=null;
+    }
   }
+
 
   async function loadVideo(){
-    const url=urlInput.value.trim(); if(!url)return;
-    clearError(); loadBtn.disabled=true; statConn.textContent="Resolving…";
-    sessionToken++; attachGeneration++; seekGeneration++;
-    destroyMSE(); fullAttached=false; chunks=[]; pendingSeekTarget=null;
-    desiredTime=0; desiredAutoplay=true; internalSeekTarget=null; internalSeekUntil=0;
-    lastAttachedChunk=null; lastAttachedTarget=null; lastPlaybackChunk=null;
+
+    const url=urlInput.value.trim();
+
+    if(!url)return;
+
+    clearError();
+
+    loadBtn.disabled=true;
+    statConn.textContent="Resolving…";
+
+    sessionToken++;
+    attachGeneration++;
+    seekGeneration++;
+
+    destroyMSE();
+
+    fullAttached=false;
+    chunks=[];
+
+    pendingSeekTarget=null;
+
+    desiredTime=0;
+    desiredAutoplay=true;
+
+    internalSeekTarget=null;
+    internalSeekUntil=0;
+
+    lastAttachedChunk=null;
+    lastAttachedTarget=null;
+    lastPlaybackChunk=null;
+
     try{
-      const d=await post("/api/load",{url});
-      videoId=d.video_id; duration=d.duration||0; mime=d.mime||mime;
-      videoTitle.textContent=d.title||""; videoTitle.style.display="block";
+
+      const d=await post(
+        "/api/load",
+        {
+          url
+        }
+      );
+
+      videoId=d.video_id;
+      duration=d.duration||0;
+      mime=d.mime||mime;
+
+      videoTitle.textContent=d.title||"";
+      videoTitle.style.display="block";
+
       statMode.textContent=d.mode||"chunked";
-      player.removeAttribute("src"); player.load();
+
+      player.removeAttribute("src");
+      player.load();
+
       pendingSeekTarget=0;
+
       startPolling();
-    }catch(e){showError(e.message);statConn.textContent="Error";}
-    finally{loadBtn.disabled=false;}
+
+    }catch(e){
+
+      showError(e.message);
+      statConn.textContent="Error";
+
+    }finally{
+
+      loadBtn.disabled=false;
+    }
   }
 
-  function startPolling(){if(poll)clearInterval(poll);poll=setInterval(pollStatus,250);pollStatus();}
+
+  function startPolling(){
+
+    if(poll){
+      clearInterval(poll);
+    }
+
+    poll=setInterval(
+      pollStatus,
+      250
+    );
+
+    pollStatus();
+  }
+
 
   function completedChunkCovering(t){
-    return chunks.find(c=>c.status==="complete" && c.start-0.01<=t && t<c.end+0.01) || null;
+
+    return chunks.find(
+      c =>
+        c.status==="complete" &&
+        c.start-0.01<=t &&
+        t<c.end+0.01
+    ) || null;
   }
+
 
   function debugTimelineSnapshot(reason){
+
     if(!chunks.length)return;
+
     const t=Number(player.currentTime)||0;
+
     const c=completedChunkCovering(t);
+
     const ranges=[];
-    try{for(let i=0;i<player.buffered.length;i++)ranges.push([+player.buffered.start(i).toFixed(3),+player.buffered.end(i).toFixed(3)]);}catch(_){}
-    console.log("[PLAYER][TIMELINE SNAPSHOT]", {
-      reason, videoTime:+t.toFixed(3),
-      playingChunk:c?{index:c.index,start:c.start,end:c.end,actual:c.actual_duration}:null,
-      buffered:ranges,
-      chunks:chunks.map(x=>({i:x.index,s:+x.start.toFixed(3),e:+x.end.toFixed(3),actual:x.actual_duration,status:x.status}))
-    });
+
+    try{
+
+      for(
+        let i=0;
+        i<player.buffered.length;
+        i++
+      ){
+        ranges.push(
+          [
+            +player.buffered.start(i).toFixed(3),
+            +player.buffered.end(i).toFixed(3)
+          ]
+        );
+      }
+
+    }catch(_){}
+
+
+    console.log(
+      "[PLAYER][TIMELINE SNAPSHOT]",
+      {
+        reason,
+
+        videoTime:+t.toFixed(3),
+
+        playingChunk:c
+          ? {
+              index:c.index,
+              start:c.start,
+              end:c.end,
+              actual:c.actual_duration
+            }
+          : null,
+
+        buffered:ranges,
+
+        chunks:chunks.map(
+          x=>({
+            i:x.index,
+            s:+x.start.toFixed(3),
+            e:+x.end.toFixed(3),
+            actual:x.actual_duration,
+            status:x.status
+          })
+        )
+      }
+    );
   }
 
+
   async function fetchChunk(c,token){
-    const r=await fetch(`/media/chunk/${encodeURIComponent(videoId)}/${c.index}`,{cache:"no-store"});
-    if(!r.ok)throw new Error(`Chunk ${c.index} is not ready`);
+
+    const r=await fetch(
+      `${API_BASE}/media/chunk/${encodeURIComponent(videoId)}/${c.index}`,
+      {
+        cache:"no-store"
+      }
+    );
+
+    if(!r.ok){
+      throw new Error(
+        `Chunk ${c.index} is not ready`
+      );
+    }
+
     const b=await r.arrayBuffer();
-    if(token!==sessionToken)throw new Error("stale playback request");
-    dbgChunk(c,"FETCHED",`bytes=${b.byteLength}`);
+
+    if(token!==sessionToken){
+      throw new Error(
+        "stale playback request"
+      );
+    }
+
+    dbgChunk(
+      c,
+      "FETCHED",
+      `bytes=${b.byteLength}`
+    );
+
     return b;
   }
 
+
   async function ensureMSE(){
-    if(mediaSource && sourceBuffer)return;
-    if(!window.MediaSource)throw new Error("This browser does not support Media Source Extensions.");
+
+    if(mediaSource && sourceBuffer){
+      return;
+    }
+
+    if(!window.MediaSource){
+      throw new Error(
+        "This browser does not support Media Source Extensions."
+      );
+    }
+
     mediaSource=new MediaSource();
-    objectUrl=URL.createObjectURL(mediaSource);
+
+    objectUrl=URL.createObjectURL(
+      mediaSource
+    );
+
     const ms=mediaSource;
+
     player.src=objectUrl;
     player.load();
-    await new Promise((resolve,reject)=>{
-      const fail=()=>reject(new Error("MediaSource failed to open."));
-      ms.addEventListener("sourceopen",()=>{
-        try{
-          if(ms!==mediaSource) return reject(new Error("stale MediaSource"));
-          if(!MediaSource.isTypeSupported(mime))throw new Error(`Browser does not support ${mime}`);
-          sourceBuffer=ms.addSourceBuffer(mime);
-          sourceBuffer.mode="segments";
-          sourceBuffer.addEventListener("updateend",onSourceUpdateEnd);
-          sourceBuffer.addEventListener("error",()=>dbg("SourceBuffer error"));
-          try{ms.duration=duration;}catch(_){}
-          dbg("MSE OPEN",mime);
-          resolve();
-        }catch(e){fail(e);}
-      },{once:true});
-      ms.addEventListener("error",fail,{once:true});
-    });
+
+    await new Promise(
+      (resolve,reject)=>{
+
+        const fail=()=>reject(
+          new Error("MediaSource failed to open.")
+        );
+
+        ms.addEventListener(
+          "sourceopen",
+          ()=>{
+
+            try{
+
+              if(ms!==mediaSource){
+                return reject(
+                  new Error("stale MediaSource")
+                );
+              }
+
+              if(!MediaSource.isTypeSupported(mime)){
+                throw new Error(
+                  `Browser does not support ${mime}`
+                );
+              }
+
+              sourceBuffer=ms.addSourceBuffer(
+                mime
+              );
+
+              sourceBuffer.mode="segments";
+
+              sourceBuffer.addEventListener(
+                "updateend",
+                onSourceUpdateEnd
+              );
+
+              sourceBuffer.addEventListener(
+                "error",
+                ()=>dbg("SourceBuffer error")
+              );
+
+              try{
+                ms.duration=duration;
+              }catch(_){}
+
+              dbg(
+                "MSE OPEN",
+                mime
+              );
+
+              resolve();
+
+            }catch(e){
+
+              fail();
+            }
+
+          },
+          {
+            once:true
+          }
+        );
+
+        ms.addEventListener(
+          "error",
+          fail,
+          {
+            once:true
+          }
+        );
+      }
+    );
   }
+
 
   async function appendChunk(c,token){
-    const data=await fetchChunk(c,token);
-    if(token!==sessionToken)return;
+
+    const data=await fetchChunk(
+      c,
+      token
+    );
+
+    if(token!==sessionToken){
+      return;
+    }
+
     await ensureMSE();
-    if(token!==sessionToken)return;
-    await new Promise((resolve,reject)=>{
-      appendQueue.push({c,data,resolve,reject,token});
-      dbgChunk(c,"QUEUED FOR MSE",`queueDepth=${appendQueue.length}`);
-      pumpQueue();
-    });
+
+    if(token!==sessionToken){
+      return;
+    }
+
+    await new Promise(
+      (resolve,reject)=>{
+
+        appendQueue.push(
+          {
+            c,
+            data,
+            resolve,
+            reject,
+            token
+          }
+        );
+
+        dbgChunk(
+          c,
+          "QUEUED FOR MSE",
+          `queueDepth=${appendQueue.length}`
+        );
+
+        pumpQueue();
+      }
+    );
   }
 
+
   function pumpQueue(){
-    if(appendBusy || !sourceBuffer || sourceBuffer.updating || !appendQueue.length)return;
+
+    if(
+      appendBusy ||
+      !sourceBuffer ||
+      sourceBuffer.updating ||
+      !appendQueue.length
+    ){
+      return;
+    }
+
     const item=appendQueue.shift();
-    if(item.token!==sessionToken){item.resolve();pumpQueue();return;}
+
+    if(item.token!==sessionToken){
+
+      item.resolve();
+
+      pumpQueue();
+
+      return;
+    }
+
     appendBusy=true;
+
     try{
+
       const offset=item.c.start;
-      dbgChunk(item.c,"MSE APPEND START",`timestampOffset=${offset.toFixed(3)}s`);
+
+      dbgChunk(
+        item.c,
+        "MSE APPEND START",
+        `timestampOffset=${offset.toFixed(3)}s`
+      );
+
       sourceBuffer.timestampOffset=offset;
-      sourceBuffer.appendBuffer(item.data);
+
+      sourceBuffer.appendBuffer(
+        item.data
+      );
+
       sourceBuffer._chunk=item.c;
       sourceBuffer._chunkResolve=item.resolve;
       sourceBuffer._chunkReject=item.reject;
+
     }catch(e){
-      appendBusy=false; item.reject(e); setTimeout(pumpQueue,0);
+
+      appendBusy=false;
+
+      item.reject(e);
+
+      setTimeout(
+        pumpQueue,
+        0
+      );
     }
   }
 
+
   function onSourceUpdateEnd(){
+
     if(!sourceBuffer)return;
+
     const c=sourceBuffer._chunk;
+
     const r=sourceBuffer._chunkResolve;
-    sourceBuffer._chunk=null; sourceBuffer._chunkResolve=null; sourceBuffer._chunkReject=null;
+
+    sourceBuffer._chunk=null;
+    sourceBuffer._chunkResolve=null;
+    sourceBuffer._chunkReject=null;
+
     appendBusy=false;
+
     if(c){
+
       currentAppendEnd=c.end;
+
       let ranges=[];
-      try{for(let i=0;i<player.buffered.length;i++)ranges.push([player.buffered.start(i),player.buffered.end(i)]);}catch(_){ }
-      dbgChunk(c,"MSE APPEND END",`buffered=${JSON.stringify(ranges)}`);
+
+      try{
+
+        for(
+          let i=0;
+          i<player.buffered.length;
+          i++
+        ){
+
+          ranges.push(
+            [
+              player.buffered.start(i),
+              player.buffered.end(i)
+            ]
+          );
+        }
+
+      }catch(_){}
+
+      dbgChunk(
+        c,
+        "MSE APPEND END",
+        `buffered=${JSON.stringify(ranges)}`
+      );
     }
+
     if(r)r();
+
     pumpQueue();
   }
 
+
   async function rebuildMSE(target){
+
     attachGeneration++;
-    const gen=attachGeneration, token=sessionToken;
+
+    const gen=attachGeneration;
+    const token=sessionToken;
+
     rebuilding=true;
+
     destroyMSE();
+
     await ensureMSE();
-    if(gen!==attachGeneration || token!==sessionToken)return false;
+
+    if(
+      gen!==attachGeneration ||
+      token!==sessionToken
+    ){
+      return false;
+    }
+
     return true;
   }
 
-  function markInternalSeek(t,ms=1200){
+
+  function markInternalSeek(
+    t,
+    ms=1200
+  ){
+
     internalSeekTarget=t;
+
     internalSeekUntil=Date.now()+ms;
-    try{player.currentTime=t;}catch(_){}
-    setTimeout(()=>{
-      if(internalSeekTarget===t && Date.now()>=internalSeekUntil){
-        internalSeekTarget=null; internalSeekUntil=0;
-      }
-    },ms+50);
+
+    try{
+      player.currentTime=t;
+    }catch(_){}
+
+    setTimeout(
+      ()=>{
+        if(
+          internalSeekTarget===t &&
+          Date.now()>=internalSeekUntil
+        ){
+
+          internalSeekTarget=null;
+          internalSeekUntil=0;
+        }
+      },
+      ms+50
+    );
   }
 
-  async function attachFromChunk(target,autoplay=true){
-    if(fullAttached)return false;
-    const first=completedChunkCovering(target);
-    if(!first)return false;
-    if(rebuilding)return false;
-    if(lastAttachedChunk===first.index && lastAttachedTarget!==null && Math.abs(lastAttachedTarget-target)<0.25){
+
+  async function attachFromChunk(
+    target,
+    autoplay=true
+  ){
+
+    if(fullAttached){
+      return false;
+    }
+
+    const first=completedChunkCovering(
+      target
+    );
+
+    if(!first){
+      return false;
+    }
+
+    if(rebuilding){
+      return false;
+    }
+
+    if(
+      lastAttachedChunk===first.index &&
+      lastAttachedTarget!==null &&
+      Math.abs(
+        lastAttachedTarget-target
+      )<0.25
+    ){
+
       markInternalSeek(target);
-      if(autoplay)player.play().catch(()=>{});
+
+      if(autoplay){
+        player.play().catch(()=>{});
+      }
+
       return true;
     }
-    const gen=++attachGeneration, token=sessionToken;
-    rebuilding=true; desiredTime=target; desiredAutoplay=autoplay;
-    statPlayback.textContent=`Buffering ${fmtTime(target)}…`; clearError();
+
+    const gen=++attachGeneration;
+    const token=sessionToken;
+
+    rebuilding=true;
+
+    desiredTime=target;
+    desiredAutoplay=autoplay;
+
+    statPlayback.textContent=
+      `Buffering ${fmtTime(target)}…`;
+
+    clearError();
+
     try{
+
       destroyMSE();
+
       await ensureMSE();
-      if(gen!==attachGeneration || token!==sessionToken)return false;
-      const ordered=chunks.filter(c=>c.status==="complete").sort((a,b)=>a.start-b.start);
+
+      if(
+        gen!==attachGeneration ||
+        token!==sessionToken
+      ){
+        return false;
+      }
+
+      const ordered=chunks
+        .filter(
+          c=>c.status==="complete"
+        )
+        .sort(
+          (a,b)=>a.start-b.start
+        );
+
       const run=[first];
+
       let cur=first;
+
       while(true){
-        const next=ordered.find(c=>c.index!==cur.index && Math.abs(c.start-cur.end)<0.20);
+
+        const next=ordered.find(
+          c =>
+            c.index!==cur.index &&
+            Math.abs(c.start-cur.end)<0.20
+        );
+
         if(!next)break;
-        run.push(next);cur=next;
+
+        run.push(next);
+
+        cur=next;
       }
-      dbg("ATTACH RUN",run.map(c=>`${c.index}:${c.start.toFixed(3)}-${c.end.toFixed(3)}`).join(" | "));
+
+      dbg(
+        "ATTACH RUN",
+        run.map(
+          c =>
+            `${c.index}:${c.start.toFixed(3)}-${c.end.toFixed(3)}`
+        ).join(" | ")
+      );
+
       for(const c of run){
-        if(gen!==attachGeneration || token!==sessionToken)return false;
-        await appendChunk(c,token);
+
+        if(
+          gen!==attachGeneration ||
+          token!==sessionToken
+        ){
+          return false;
+        }
+
+        await appendChunk(
+          c,
+          token
+        );
       }
-      if(gen!==attachGeneration || token!==sessionToken)return false;
-      lastAttachedChunk=first.index; lastAttachedTarget=target;
+
+      if(
+        gen!==attachGeneration ||
+        token!==sessionToken
+      ){
+        return false;
+      }
+
+      lastAttachedChunk=first.index;
+      lastAttachedTarget=target;
+
       pendingSeekTarget=null;
+
       markInternalSeek(target);
-      statPlayback.textContent=autoplay?"Playing downloaded chunks":"Ready";
+
+      statPlayback.textContent=
+        autoplay
+          ? "Playing downloaded chunks"
+          : "Ready";
+
       clearError();
-      if(autoplay)await player.play().catch(e=>dbg("play() rejected",e.name));
-      return true;
-    }catch(e){
-      if(gen===attachGeneration && token===sessionToken){
-        statPlayback.textContent="Playback error";
-        showError(`Chunk playback failed: ${e.message}`);
-        dbg("MSE FAILURE",e);
+
+      if(autoplay){
+
+        await player.play().catch(
+          e=>dbg(
+            "play() rejected",
+            e.name
+          )
+        );
       }
+
+      return true;
+
+    }catch(e){
+
+      if(
+        gen===attachGeneration &&
+        token===sessionToken
+      ){
+
+        statPlayback.textContent=
+          "Playback error";
+
+        showError(
+          `Chunk playback failed: ${e.message}`
+        );
+
+        dbg(
+          "MSE FAILURE",
+          e
+        );
+      }
+
       return false;
+
     }finally{
-      if(gen===attachGeneration && token===sessionToken)rebuilding=false;
+
+      if(
+        gen===attachGeneration &&
+        token===sessionToken
+      ){
+        rebuilding=false;
+      }
     }
   }
+
 
   async function appendFutureChunks(){
-    if(fullAttached || rebuilding || !sourceBuffer || appendBusy || appendQueue.length)return;
+
+    if(
+      fullAttached ||
+      rebuilding ||
+      !sourceBuffer ||
+      appendBusy ||
+      appendQueue.length
+    ){
+      return;
+    }
+
     const end=currentAppendEnd;
-    if(!isFinite(end))return;
-    const next=chunks.filter(c=>c.status==="complete" && Math.abs(c.start-end)<0.20).sort((a,b)=>a.start-b.start)[0];
-    if(!next)return;
-    try{await appendChunk(next,sessionToken);}catch(e){dbg("future append failed",e);}
+
+    if(!isFinite(end)){
+      return;
+    }
+
+    const next=chunks
+      .filter(
+        c =>
+          c.status==="complete" &&
+          Math.abs(c.start-end)<0.20
+      )
+      .sort(
+        (a,b)=>a.start-b.start
+      )[0];
+
+    if(!next){
+      return;
+    }
+
+    try{
+
+      await appendChunk(
+        next,
+        sessionToken
+      );
+
+    }catch(e){
+
+      dbg(
+        "future append failed",
+        e
+      );
+    }
   }
+
 
   async function requestPlaybackSeek(t){
-    if(!videoId || !duration)return;
-    t=Math.max(0,Math.min(duration-0.02,t));
+
+    if(!videoId || !duration){
+      return;
+    }
+
+    t=Math.max(
+      0,
+      Math.min(
+        duration-0.02,
+        t
+      )
+    );
+
     desiredTime=t;
+
     desiredAutoplay=!player.paused;
+
     pendingSeekTarget=t;
+
     const gen=++seekGeneration;
-    // A new user seek supersedes an in-progress attachment. We don't kill the
-    // server's chunk download; we only invalidate the browser's old MSE build.
+
+    /*
+     * A new user seek supersedes an in-progress attachment.
+     * We don't kill the server's chunk download;
+     * we only invalidate the browser's old MSE build.
+     */
+
     if(rebuilding){
+
       attachGeneration++;
+
       destroyMSE();
+
       rebuilding=false;
     }
-    statPlayback.textContent=`Seeking to ${fmtTime(t)}…`;
+
+    statPlayback.textContent=
+      `Seeking to ${fmtTime(t)}…`;
+
     try{
-      const r=await post("/api/seek",{video_id:videoId,time:t});
-      if(gen!==seekGeneration)return;
-      if(r.action==="full"){await attachFull();return;}
+
+      const r=await post(
+        "/api/seek",
+        {
+          video_id:videoId,
+          time:t
+        }
+      );
+
+      if(gen!==seekGeneration){
+        return;
+      }
+
+      if(r.action==="full"){
+
+        await attachFull();
+
+        return;
+      }
+
       const c=completedChunkCovering(t);
-      if(c){await attachFromChunk(t,desiredAutoplay);}
-      else {statPlayback.textContent=`Waiting for ${fmtTime(t)}…`;clearError();}
-    }catch(e){if(gen===seekGeneration)showError(e.message);}
+
+      if(c){
+
+        await attachFromChunk(
+          t,
+          desiredAutoplay
+        );
+
+      }else{
+
+        statPlayback.textContent=
+          `Waiting for ${fmtTime(t)}…`;
+
+        clearError();
+      }
+
+    }catch(e){
+
+      if(gen===seekGeneration){
+        showError(e.message);
+      }
+    }
   }
 
+
   async function attachFull(){
-    if(!videoId || fullAttached)return;
-    const r=await fetch(`/api/full/${encodeURIComponent(videoId)}`,{cache:"no-store"});
-    const d=await r.json(); if(!d.ready)return false;
-    const t=Math.max(0,Math.min(desiredTime||0,Math.max(0,duration-0.05)));
-    fullAttached=true; rebuilding=true; attachGeneration++;
+
+    if(
+      !videoId ||
+      fullAttached
+    ){
+      return;
+    }
+
+    const r=await fetch(
+      `${API_BASE}/api/full/${encodeURIComponent(videoId)}`,
+      {
+        cache:"no-store"
+      }
+    );
+
+    const d=await r.json();
+
+    if(!d.ready){
+      return false;
+    }
+
+    const t=Math.max(
+      0,
+      Math.min(
+        desiredTime||0,
+        Math.max(
+          0,
+          duration-0.05
+        )
+      )
+    );
+
+    fullAttached=true;
+    rebuilding=true;
+
+    attachGeneration++;
+
     destroyMSE();
-    player.src=`/media/full/${encodeURIComponent(videoId)}?v=${Date.now()}`;
+
+    player.src=
+      `${API_BASE}/media/full/${encodeURIComponent(videoId)}?v=${Date.now()}`;
+
     player.load();
-    await new Promise(resolve=>{
-      if(player.readyState>=1){resolve();return;}
-      player.addEventListener("loadedmetadata",resolve,{once:true});
-    });
-    try{player.currentTime=Math.min(t,Math.max(0,player.duration-0.05));}catch(_){}
-    markInternalSeek(t,1200);
-    rebuilding=false; pendingSeekTarget=null;
-    statPlayback.textContent="Full video — unrestricted seeking";clearError();
-    if(desiredAutoplay)await player.play().catch(()=>{});
-    dbg("FULL VIDEO ATTACHED",`time=${t.toFixed(3)}s duration=${player.duration.toFixed(3)}s`);
+
+    await new Promise(
+      resolve=>{
+
+        if(player.readyState>=1){
+
+          resolve();
+
+          return;
+        }
+
+        player.addEventListener(
+          "loadedmetadata",
+          resolve,
+          {
+            once:true
+          }
+        );
+      }
+    );
+
+    try{
+
+      player.currentTime=
+        Math.min(
+          t,
+          Math.max(
+            0,
+            player.duration-0.05
+          )
+        );
+
+    }catch(_){}
+
+    markInternalSeek(
+      t,
+      1200
+    );
+
+    rebuilding=false;
+
+    pendingSeekTarget=null;
+
+    statPlayback.textContent=
+      "Full video — unrestricted seeking";
+
+    clearError();
+
+    if(desiredAutoplay){
+
+      await player.play().catch(
+        ()=>{}
+      );
+    }
+
+    dbg(
+      "FULL VIDEO ATTACHED",
+      `time=${t.toFixed(3)}s duration=${player.duration.toFixed(3)}s`
+    );
+
     return true;
   }
 
-  async function pollStatus(){
-    if(!videoId)return;
-    try{
-      const r=await fetch(`/api/status/${encodeURIComponent(videoId)}`,{cache:"no-store"});
-      const d=await r.json();if(!r.ok)throw new Error(d.error||"status failed");
-      chunks=d.chunks||[];
-      const pct=d.full_percent;
-      const coverage=d.coverage_end||0;
-      coverageCached.style.width=`${Math.min(100,Math.max(0,coverage/Math.max(0.001,duration)*100))}%`;
-      coverageText.textContent=`Chunks through ${fmtTime(coverage)} · full download ${pct==null?"estimating…":pct.toFixed(1)+"%"}`;
-      statDownload.textContent=pct==null?fmtBytes(d.full_downloaded):`${pct.toFixed(1)}%`;
-      statRate.textContent=d.full_rate_bps?`${fmtBytes(d.full_rate_bps)}/s`:"—";
-      statConn.textContent=d.full_done?"Full download complete":"Full download + chunks";
-      statMode.textContent=d.mode||"chunked";
-      if(d.full_done){await attachFull();return;}
-      if(!rebuilding && pendingSeekTarget!==null){
-        const target=pendingSeekTarget,c=completedChunkCovering(target);
-        if(c){await attachFromChunk(target,desiredAutoplay);return;}
-      }
-      await appendFutureChunks();
-    }catch(e){dbg("status poll error",e);}
-  }
 
-  player.addEventListener("seeking",()=>{
-    const t=player.currentTime;
-    dbg("NATIVE SEEKING",`time=${isFinite(t)?t.toFixed(3):"NaN"}`,`rebuilding=${rebuilding}`,`internal=${internalSeekTarget!==null}`);
-    if(fullAttached){
-      if(internalSeekTarget!==null && Date.now()<internalSeekUntil && Math.abs(t-internalSeekTarget)<0.75)return;
-      if(isFinite(t))requestPlaybackSeek(t);
+  async function pollStatus(){
+
+    if(!videoId){
       return;
     }
-    if(rebuilding)return;
-    if(internalSeekTarget!==null && Date.now()<internalSeekUntil && isFinite(t) && Math.abs(t-internalSeekTarget)<0.75)return;
-    if(isFinite(t))requestPlaybackSeek(t);
-  });
-  player.addEventListener("seeked",()=>dbg("NATIVE SEEKED",`time=${player.currentTime.toFixed(3)}s`));
-  player.addEventListener("play",()=>dbg("PLAY",`time=${player.currentTime.toFixed(3)}s`,fullAttached?"FULL":"MSE"));
-  player.addEventListener("pause",()=>dbg("PAUSE",`time=${player.currentTime.toFixed(3)}s`));
-  player.addEventListener("waiting",()=>{statBuffering.textContent="Yes";dbg("WAITING",`time=${player.currentTime.toFixed(3)}s`);});
-  player.addEventListener("playing",()=>{statBuffering.textContent="No";clearError();dbg("PLAYING",`time=${player.currentTime.toFixed(3)}s`);});
-  player.addEventListener("canplay",()=>dbg("CANPLAY",`time=${player.currentTime.toFixed(3)}s`));
-  player.addEventListener("ended",async()=>{dbg("ENDED",`time=${player.currentTime.toFixed(3)}s`);if(!fullAttached)await appendFutureChunks();});
-  player.addEventListener("error",()=>{dbg("VIDEO ERROR",player.error);if(player.error)showError(`Video error ${player.error.code}: ${player.error.message||"media could not be played"}`);});
-  player.addEventListener("timeupdate",()=>{
-    const t=player.currentTime||0;
-    timeReadout.textContent=`${fmtTime(t)} / ${fmtTime(duration||player.duration||0)}`;
-    const pct=duration?100*t/duration:0;coveragePlayed.style.left=`${Math.max(0,Math.min(100,pct))}%`;
-    try{const r=player.buffered;let end=0;for(let i=0;i<r.length;i++)if(r.start(i)<=t+0.25)end=Math.max(end,r.end(i));const bp=duration?100*end/duration:0;coverageBuffered.style.width=`${Math.min(100,bp)}%`;}catch(_){ }
-    debugPlaybackSection();
-  });
 
-  $("coverageTrack").addEventListener("click",e=>{
-    if(!duration)return;
-    const r=e.currentTarget.getBoundingClientRect();
-    requestPlaybackSeek(((e.clientX-r.left)/r.width)*duration);
-  });
-  document.addEventListener("keydown",e=>{
-    if(document.activeElement===urlInput)return;
-    if(e.key==="ArrowLeft"){e.preventDefault();requestPlaybackSeek((player.currentTime||0)-5);}
-    if(e.key==="ArrowRight"){e.preventDefault();requestPlaybackSeek((player.currentTime||0)+5);}
-    if(e.code==="Space"&&document.activeElement===player){e.preventDefault();player.paused?player.play():player.pause();}
-  });
-  loadBtn.addEventListener("click",loadVideo);
-  urlInput.addEventListener("keydown",e=>{if(e.key==="Enter")loadVideo();});
-  document.addEventListener("visibilitychange",()=>{if(!document.hidden)pollStatus();});
+    try{
+
+      const r=await fetch(
+        `${API_BASE}/api/status/${encodeURIComponent(videoId)}`,
+        {
+          cache:"no-store"
+        }
+      );
+
+      const d=await r.json();
+
+      if(!r.ok){
+        throw new Error(
+          d.error||"status failed"
+        );
+      }
+
+      chunks=d.chunks||[];
+
+      const pct=d.full_percent;
+
+      const coverage=d.coverage_end||0;
+
+      coverageCached.style.width=
+        `${Math.min(
+          100,
+          Math.max(
+            0,
+            coverage /
+            Math.max(
+              0.001,
+              duration
+            ) *
+            100
+          )
+        )}%`;
+
+      coverageText.textContent=
+        `Chunks through ${fmtTime(coverage)} · full download ${
+          pct==null
+            ? "estimating…"
+            : pct.toFixed(1)+"%"
+        }`;
+
+      statDownload.textContent=
+        pct==null
+          ? fmtBytes(d.full_downloaded)
+          : `${pct.toFixed(1)}%`;
+
+      statRate.textContent=
+        d.full_rate_bps
+          ? `${fmtBytes(d.full_rate_bps)}/s`
+          : "—";
+
+      statConn.textContent=
+        d.full_done
+          ? "Full download complete"
+          : "Full download + chunks";
+
+      statMode.textContent=
+        d.mode||"chunked";
+
+      if(d.full_done){
+
+        await attachFull();
+
+        return;
+      }
+
+      if(
+        !rebuilding &&
+        pendingSeekTarget!==null
+      ){
+
+        const target=
+          pendingSeekTarget;
+
+        const c=
+          completedChunkCovering(target);
+
+        if(c){
+
+          await attachFromChunk(
+            target,
+            desiredAutoplay
+          );
+
+          return;
+        }
+      }
+
+      await appendFutureChunks();
+
+    }catch(e){
+
+      dbg(
+        "status poll error",
+        e
+      );
+    }
+  }
+
+
+  player.addEventListener(
+    "seeking",
+    ()=>{
+
+      const t=player.currentTime;
+
+      dbg(
+        "NATIVE SEEKING",
+        `time=${isFinite(t)?t.toFixed(3):"NaN"}`,
+        `rebuilding=${rebuilding}`,
+        `internal=${internalSeekTarget!==null}`
+      );
+
+      if(fullAttached){
+
+        if(
+          internalSeekTarget!==null &&
+          Date.now()<internalSeekUntil &&
+          Math.abs(
+            t-internalSeekTarget
+          )<0.75
+        ){
+          return;
+        }
+
+        if(isFinite(t)){
+          requestPlaybackSeek(t);
+        }
+
+        return;
+      }
+
+      if(rebuilding){
+        return;
+      }
+
+      if(
+        internalSeekTarget!==null &&
+        Date.now()<internalSeekUntil &&
+        isFinite(t) &&
+        Math.abs(
+          t-internalSeekTarget
+        )<0.75
+      ){
+        return;
+      }
+
+      if(isFinite(t)){
+        requestPlaybackSeek(t);
+      }
+    }
+  );
+
+
+  player.addEventListener(
+    "seeked",
+    ()=>{
+
+      dbg(
+        "NATIVE SEEKED",
+        `time=${player.currentTime.toFixed(3)}s`
+      );
+
+    }
+  );
+
+
+  player.addEventListener(
+    "play",
+    ()=>{
+
+      dbg(
+        "PLAY",
+        `time=${player.currentTime.toFixed(3)}s`,
+        fullAttached
+          ? "FULL"
+          : "MSE"
+      );
+
+    }
+  );
+
+
+  player.addEventListener(
+    "pause",
+    ()=>{
+
+      dbg(
+        "PAUSE",
+        `time=${player.currentTime.toFixed(3)}s`
+      );
+
+    }
+  );
+
+
+  player.addEventListener(
+    "waiting",
+    ()=>{
+
+      statBuffering.textContent="Yes";
+
+      dbg(
+        "WAITING",
+        `time=${player.currentTime.toFixed(3)}s`
+      );
+
+    }
+  );
+
+
+  player.addEventListener(
+    "playing",
+    ()=>{
+
+      statBuffering.textContent="No";
+
+      clearError();
+
+      dbg(
+        "PLAYING",
+        `time=${player.currentTime.toFixed(3)}s`
+      );
+
+    }
+  );
+
+
+  player.addEventListener(
+    "canplay",
+    ()=>{
+
+      dbg(
+        "CANPLAY",
+        `time=${player.currentTime.toFixed(3)}s`
+      );
+
+    }
+  );
+
+
+  player.addEventListener(
+    "ended",
+    async()=>{
+
+      dbg(
+        "ENDED",
+        `time=${player.currentTime.toFixed(3)}s`
+      );
+
+      if(!fullAttached){
+        await appendFutureChunks();
+      }
+    }
+  );
+
+
+  player.addEventListener(
+    "error",
+    ()=>{
+
+      dbg(
+        "VIDEO ERROR",
+        player.error
+      );
+
+      if(player.error){
+
+        showError(
+          `Video error ${player.error.code}: ${
+            player.error.message||
+            "media could not be played"
+          }`
+        );
+      }
+    }
+  );
+
+
+  player.addEventListener(
+    "timeupdate",
+    ()=>{
+
+      const t=
+        player.currentTime||0;
+
+      timeReadout.textContent=
+        `${fmtTime(t)} / ${fmtTime(
+          duration||
+          player.duration||
+          0
+        )}`;
+
+      const pct=
+        duration
+          ? 100*t/duration
+          : 0;
+
+      coveragePlayed.style.left=
+        `${Math.max(
+          0,
+          Math.min(
+            100,
+            pct
+          )
+        )}%`;
+
+      try{
+
+        const r=
+          player.buffered;
+
+        let end=0;
+
+        for(
+          let i=0;
+          i<r.length;
+          i++
+        ){
+
+          if(
+            r.start(i)<=t+0.25
+          ){
+
+            end=
+              Math.max(
+                end,
+                r.end(i)
+              );
+          }
+        }
+
+        const bp=
+          duration
+            ? 100*end/duration
+            : 0;
+
+        coverageBuffered.style.width=
+          `${Math.min(
+            100,
+            bp
+          )}%`;
+
+      }catch(_){}
+
+      debugPlaybackSection();
+    }
+  );
+
+
+  $("coverageTrack").addEventListener(
+    "click",
+    e=>{
+
+      if(!duration){
+        return;
+      }
+
+      const r=
+        e.currentTarget.getBoundingClientRect();
+
+      requestPlaybackSeek(
+        (
+          (e.clientX-r.left) /
+          r.width
+        ) *
+        duration
+      );
+    }
+  );
+
+
+  document.addEventListener(
+    "keydown",
+    e=>{
+
+      if(
+        document.activeElement===
+        urlInput
+      ){
+        return;
+      }
+
+      if(e.key==="ArrowLeft"){
+
+        e.preventDefault();
+
+        requestPlaybackSeek(
+          (player.currentTime||0)-5
+        );
+      }
+
+      if(e.key==="ArrowRight"){
+
+        e.preventDefault();
+
+        requestPlaybackSeek(
+          (player.currentTime||0)+5
+        );
+      }
+
+      if(
+        e.code==="Space" &&
+        document.activeElement===
+        player
+      ){
+
+        e.preventDefault();
+
+        player.paused
+          ? player.play()
+          : player.pause();
+      }
+    }
+  );
+
+
+  loadBtn.addEventListener(
+    "click",
+    loadVideo
+  );
+
+
+  urlInput.addEventListener(
+    "keydown",
+    e=>{
+
+      if(e.key==="Enter"){
+        loadVideo();
+      }
+    }
+  );
+
+
+  document.addEventListener(
+    "visibilitychange",
+    ()=>{
+      if(!document.hidden){
+        pollStatus();
+      }
+    }
+  );
+
 })();
-
 </script>
+
 </body>
 </html>
