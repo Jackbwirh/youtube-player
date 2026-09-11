@@ -41,6 +41,8 @@ PORT = int(os.environ.get("PORT", 5000))
 VIDEOS_DIR = Path(__file__).resolve().parent / "videos"
 VIDEOS_DIR.mkdir(exist_ok=True)
 
+YTDLP_COOKIE_FILE = "/etc/secrets/cookies.txt"
+
 CHUNK_SIZES = (3.0, 5.0, 10.0)
 CHUNK_SIZE_FOREVER = 10.0
 FFMPEG_TIMEOUT = 180
@@ -152,7 +154,7 @@ def extract_info(url):
         "no_warnings": True,
         "noplaylist": True,
         "skip_download": True,
-        "cookiefile": "/etc/secrets/cookies.txt",
+        "cookiefile": YTDLP_COOKIE_FILE,
     }
 
     with yt_dlp.YoutubeDL(opts) as ydl:
@@ -837,7 +839,7 @@ def full_download_worker(s, info):
             "progress_hooks": [hook],
             "retries": 5,
             "fragment_retries": 5,
-            "cookiefile": "/etc/secrets/cookies.txt",
+            "cookiefile": YTDLP_COOKIE_FILE,
         }
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([s.original_url])
