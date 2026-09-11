@@ -36,8 +36,8 @@ import urllib.parse
 import webbrowser
 from pathlib import Path
 
-HOST = "127.0.0.1"
-PORT_CANDIDATES = list(range(8000, 8020))
+HOST = "0.0.0.0"
+PORT = int(os.environ.get("PORT", 5000))
 VIDEOS_DIR = Path(__file__).resolve().parent / "videos"
 VIDEOS_DIR.mkdir(exist_ok=True)
 
@@ -1112,15 +1112,7 @@ class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
 
 def find_port():
-    for p in PORT_CANDIDATES:
-        with contextlib.closing(socket.socket()) as s:
-            try:
-                s.bind((HOST, p))
-                return p
-            except OSError:
-                pass
-    raise RuntimeError("no free port")
-
+    return PORT
 
 def main():
     if not (Path(__file__).resolve().parent / "index.html").exists():
@@ -1132,7 +1124,7 @@ def main():
         print("WARNING: FFmpeg is required for chunked playback")
     port = find_port()
     httpd = Server((HOST, port), Handler)
-    url = f"http://{HOST}:{port}/"
+    url = f"http://127.0.0.1:{port}/"
     print("=" * 70)
     print(" Local YouTube-style Video Player v10")
     print("=" * 70)
@@ -1145,12 +1137,7 @@ def main():
     print(" Architecture       : full download + continuous FFmpeg 3/5/10-second segment sequences (source-timeline locked)")
     print("=" * 70)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
-    log("STATUS", f"Server started on {url}")
-    try:
-        webbrowser.open(url)
-        log("INFO", "Browser opened")
-    except Exception:
-        pass
+    log("STATUS", f"Server started on {HOST}:{port}")   
     try:
         while True:
             time.sleep(1)
