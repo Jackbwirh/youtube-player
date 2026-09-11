@@ -147,7 +147,14 @@ def atomic_json(path, data):
 
 
 def extract_info(url):
-    opts = {"quiet": True, "no_warnings": True, "noplaylist": True, "skip_download": True}
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "skip_download": True,
+        "cookiefile": "/etc/secrets/cookies.txt",
+    }
+
     with yt_dlp.YoutubeDL(opts) as ydl:
         return ydl.extract_info(url, download=False)
 
@@ -821,10 +828,16 @@ def full_download_worker(s, info):
                 s.record_full(got, total, d.get("total_bytes") is not None)
 
         opts = {
-            "quiet": True, "no_warnings": True, "noplaylist": True,
-            "outtmpl": outtmpl, "format": fmt_expr,
-            "merge_output_format": "mp4", "progress_hooks": [hook],
-            "retries": 5, "fragment_retries": 5,
+            "quiet": True,
+            "no_warnings": True,
+            "noplaylist": True,
+            "outtmpl": outtmpl,
+            "format": fmt_expr,
+            "merge_output_format": "mp4",
+            "progress_hooks": [hook],
+            "retries": 5,
+            "fragment_retries": 5,
+            "cookiefile": "/etc/secrets/cookies.txt",
         }
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([s.original_url])
