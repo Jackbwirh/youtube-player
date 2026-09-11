@@ -51,7 +51,7 @@ VIDEOS_DIR.mkdir(exist_ok=True)
 #   Runtime path: /etc/secrets/cookies.txt
 YTDLP_COOKIE_FILE = os.environ.get(
     "YTDLP_COOKIE_FILE",
-    "/etc/secrets/cookies.txt"
+    str(BASE_DIR / "cookies.txt")
 )
 
 # Optional. If set in Render environment variables, this can help yt-dlp
