@@ -4,28 +4,27 @@ Local YouTube-style player v13.
 
 Playback architecture:
   * The complete video downloads continuously with yt-dlp in the background.
-  * Playback is built from independent, real fragmented-MP4 chunk files.
-  * Chunk sizes are 3s, then 5s, then 10s forever for a new playback path.
-  * The browser uses Media Source Extensions to append the individual MP4
-    chunks into one continuous timeline.
-  * If a seek lands inside an already-completed chunk, no new download is
-    started. If it lands inside a chunk currently being produced, playback
-    simply buffers until that chunk completes.
-  * A seek outside all existing chunks pauses the active chunk worker, keeps
-    its partial work, and starts a new 3/5/10-second sequence at the target.
+  * Playback is built from independent fragmented-MP4 chunk files.
+  * Chunk sizes are 3s, then 5s, then 10s forever.
+  * The browser uses Media Source Extensions to append chunks into one timeline.
+  * Seeking inside an existing chunk does not start a new download.
+  * Seeking outside existing coverage starts a new playback sequence.
   * When the full download completes, temporary chunks are deleted and the
-    browser switches to the complete MP4 for unrestricted seeking.
+    browser can switch to the complete MP4.
+
+Render deployment:
+  * HOST = 0.0.0.0
+  * PORT = Render's supplied PORT environment variable
+  * YouTube cookies are loaded from:
+        /etc/secrets/cookies.txt
 """
 
 import contextlib
 import http.server
 import json
-import mimetypes
 import os
 import re
 import shutil
-import signal
-import socket
 import socketserver
 import subprocess
 import sys
@@ -33,34 +32,56 @@ import threading
 import time
 import traceback
 import urllib.parse
-import webbrowser
 from pathlib import Path
+
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
 
 HOST = "0.0.0.0"
 PORT = int(os.environ.get("PORT", 5000))
 
-VIDEOS_DIR = Path(__file__).resolve().parent / "videos"
+BASE_DIR = Path(__file__).resolve().parent
+VIDEOS_DIR = BASE_DIR / "videos"
 VIDEOS_DIR.mkdir(exist_ok=True)
 
 # Render Secret File:
-# cookies.txt -> /etc/secrets/cookies.txt
+#   Filename: cookies.txt
+#   Runtime path: /etc/secrets/cookies.txt
 YTDLP_COOKIE_FILE = os.environ.get(
     "YTDLP_COOKIE_FILE",
     "/etc/secrets/cookies.txt"
 )
 
+# Optional. If set in Render environment variables, this can help yt-dlp
+# maintain the same browser-like user agent as the cookies.
+YTDLP_USER_AGENT = os.environ.get("YTDLP_USER_AGENT", "").strip()
+
 CHUNK_SIZES = (3.0, 5.0, 10.0)
-CHUNK_SIZE_FOREVER = 10.0
 FFMPEG_TIMEOUT = 180
 FFPROBE_TIMEOUT = 30
 MAX_REQUEST_BODY = 8192
 POLL_INTERVAL = 0.15
+
 _ENCODER_CACHE = None
 
 _LOG_LOCK = threading.Lock()
+
 SESSIONS = {}
 SESSIONS_LOCK = threading.Lock()
 
+_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{4,32}$")
+
+_YOUTUBE_HOST_RE = re.compile(
+    r"^(www\.|m\.|music\.)?(youtube\.com|youtu\.be)$",
+    re.I
+)
+
+
+# ============================================================================
+# LOGGING
+# ============================================================================
 
 def log(level, msg):
     with _LOG_LOCK:
@@ -74,6 +95,7 @@ def log(level, msg):
 def redact_url(url):
     try:
         p = urllib.parse.urlsplit(url)
+
         pairs = urllib.parse.parse_qsl(
             p.query,
             keep_blank_values=True
@@ -103,12 +125,17 @@ def redact_url(url):
                 p.netloc,
                 p.path,
                 urllib.parse.urlencode(pairs),
-                "",
+                ""
             )
         )
+
     except Exception:
         return "<url>"
 
+
+# ============================================================================
+# DEPENDENCY CHECKS
+# ============================================================================
 
 def check_yt_dlp():
     try:
@@ -122,8 +149,17 @@ def check_ffmpeg():
     return shutil.which("ffmpeg") is not None
 
 
+YTDLP_AVAILABLE, yt_dlp = check_yt_dlp()
+FFMPEG_AVAILABLE = check_ffmpeg()
+
+
 def available_h264_encoder():
-    """Prefer a hardware encoder when available."""
+    """
+    Prefer AMD AMF if available.
+
+    Render normally will not have an AMD GPU, so Render will generally use
+    libx264 instead.
+    """
 
     global _ENCODER_CACHE
 
@@ -132,19 +168,31 @@ def available_h264_encoder():
 
     try:
         p = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-encoders"],
+            [
+                "ffmpeg",
+                "-hide_banner",
+                "-encoders"
+            ],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            timeout=10,
+            timeout=10
         )
 
         text = p.stdout or ""
 
-        if " h264_amf " in text or " h264_amf\n" in text:
+        if (
+            " h264_amf " in text
+            or " h264_amf\n" in text
+        ):
             _ENCODER_CACHE = "h264_amf"
-        elif " libx264 " in text or " libx264\n" in text:
+
+        elif (
+            " libx264 " in text
+            or " libx264\n" in text
+        ):
             _ENCODER_CACHE = "libx264"
+
         else:
             _ENCODER_CACHE = None
 
@@ -154,22 +202,14 @@ def available_h264_encoder():
     return _ENCODER_CACHE
 
 
-YTDLP_AVAILABLE, yt_dlp = check_yt_dlp()
-FFMPEG_AVAILABLE = check_ffmpeg()
-
-_VIDEO_ID_RE = re.compile(
-    r"^[A-Za-z0-9_-]{4,32}$"
-)
-
-_YOUTUBE_HOST_RE = re.compile(
-    r"^(www\.|m\.|music\.)?(youtube\.com|youtu\.be)$",
-    re.I
-)
-
+# ============================================================================
+# GENERAL HELPERS
+# ============================================================================
 
 def sanitize_video_id(v):
     if not v or not _VIDEO_ID_RE.match(v):
         raise ValueError("invalid video id")
+
     return v
 
 
@@ -198,6 +238,8 @@ def fmt_size(n):
 
         n /= 1024
 
+    return f"{n:.1f} GiB"
+
 
 def atomic_json(path, data):
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -210,27 +252,53 @@ def atomic_json(path, data):
     os.replace(tmp, path)
 
 
-def extract_info(url):
-    opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "noplaylist": True,
-        "skip_download": True,
-    }
+# ============================================================================
+# YT-DLP
+# ============================================================================
 
-    if Path(YTDLP_COOKIE_FILE).is_file():
-        opts["cookiefile"] = YTDLP_COOKIE_FILE
+def yt_dlp_options(base=None):
+    """
+    Build common yt-dlp options.
+
+    The cookie file is only added if it actually exists. This means the same
+    server.py can still run locally without a cookies.txt file.
+    """
+
+    opts = dict(base or {})
+
+    cookie_path = Path(YTDLP_COOKIE_FILE)
+
+    if cookie_path.is_file():
+        opts["cookiefile"] = str(cookie_path)
 
         log(
-            "INFO",
-            f"yt-dlp: using cookie file {YTDLP_COOKIE_FILE}"
+            "YTDLP",
+            f"Using YouTube cookies from {cookie_path}"
         )
+
     else:
         log(
-            "WARNING",
-            f"yt-dlp: cookie file not found at "
-            f"{YTDLP_COOKIE_FILE}"
+            "YTDLP",
+            f"No cookie file found at {cookie_path}"
         )
+
+    if YTDLP_USER_AGENT:
+        opts["http_headers"] = {
+            "User-Agent": YTDLP_USER_AGENT
+        }
+
+    return opts
+
+
+def extract_info(url):
+    opts = yt_dlp_options(
+        {
+            "quiet": True,
+            "no_warnings": True,
+            "noplaylist": True,
+            "skip_download": True,
+        }
+    )
 
     with yt_dlp.YoutubeDL(opts) as ydl:
         return ydl.extract_info(
@@ -238,6 +306,10 @@ def extract_info(url):
             download=False
         )
 
+
+# ============================================================================
+# FORMAT SELECTION
+# ============================================================================
 
 def is_h264(f):
     return (
@@ -259,7 +331,7 @@ def choose_streams(info):
     """
     Pick a browser-friendly H.264/AAC source pair.
 
-    Audio selection is deliberately language-aware.
+    Audio selection prefers English and original/default tracks.
     """
 
     formats = info.get("formats", [])
@@ -289,10 +361,13 @@ def choose_streams(info):
             "en-au",
         ):
             score = 1000
+
         elif lang.startswith("en-"):
             score = 950
+
         elif lang:
             score = 100
+
         else:
             score = 300
 
@@ -305,7 +380,10 @@ def choose_streams(info):
         if "original" in name:
             score += 150
 
-        if "dub" in note or "dubbed" in note:
+        if "dub" in note:
+            score -= 400
+
+        if "dubbed" in note:
             score -= 400
 
         if "auto-dub" in note:
@@ -314,6 +392,7 @@ def choose_streams(info):
         return score
 
     for f in formats:
+
         protocol = (
             f.get("protocol") or ""
         ).lower()
@@ -371,7 +450,7 @@ def choose_streams(info):
             f.get("height") or 0,
             f.get("tbr") or 0,
         ),
-        reverse=True,
+        reverse=True
     )
 
     videos.sort(
@@ -379,7 +458,7 @@ def choose_streams(info):
             f.get("height") or 0,
             f.get("tbr") or 0,
         ),
-        reverse=True,
+        reverse=True
     )
 
     audios.sort(
@@ -389,24 +468,26 @@ def choose_streams(info):
             f.get("tbr") or 0,
             f.get("filesize") or 0,
         ),
-        reverse=True,
+        reverse=True
     )
 
     if videos and audios:
         return (
             None,
             videos[0],
-            audios[0],
+            audios[0]
         )
 
     return (
-        progressive[0]
-        if progressive
-        else None,
+        progressive[0] if progressive else None,
         None,
-        None,
+        None
     )
 
+
+# ============================================================================
+# MEDIA / FFMPEG HELPERS
+# ============================================================================
 
 def header_blob(fmt):
     headers = (
@@ -416,6 +497,7 @@ def header_blob(fmt):
     lines = []
 
     for k, v in headers.items():
+
         if k.lower() in (
             "range",
             "content-length",
@@ -427,19 +509,22 @@ def header_blob(fmt):
             f"{k}: {v}"
         )
 
-    return "\r\n".join(lines) + (
-        "\r\n" if lines else ""
+    return (
+        "\r\n".join(lines)
+        + ("\r\n" if lines else "")
     )
 
 
 def ffmpeg_input_args(fmt):
     blob = header_blob(fmt)
 
-    return (
-        ["-headers", blob]
-        if blob
-        else []
-    )
+    if blob:
+        return [
+            "-headers",
+            blob
+        ]
+
+    return []
 
 
 def stream_url(fmt):
@@ -466,6 +551,117 @@ def codec_string(video_fmt, audio_fmt):
         f'video/mp4; codecs="{v},{a}"'
     )
 
+
+def probe_media_details(path):
+    try:
+        p = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                (
+                    "format=duration,start_time:"
+                    "stream=index,codec_type,start_time,duration"
+                ),
+                "-of",
+                "json",
+                str(path),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=FFPROBE_TIMEOUT,
+        )
+
+        if p.returncode != 0:
+            return None
+
+        data = json.loads(
+            p.stdout or "{}"
+        )
+
+        streams = data.get("streams") or []
+
+        video = next(
+            (
+                x for x in streams
+                if x.get("codec_type") == "video"
+            ),
+            {}
+        )
+
+        audio = next(
+            (
+                x for x in streams
+                if x.get("codec_type") == "audio"
+            ),
+            {}
+        )
+
+        return {
+            "streams": len(streams),
+            "format_duration": (
+                data.get("format", {})
+                .get("duration")
+            ),
+            "format_start": (
+                data.get("format", {})
+                .get("start_time")
+            ),
+            "video_start": video.get("start_time"),
+            "audio_start": audio.get("start_time"),
+            "video_duration": video.get("duration"),
+            "audio_duration": audio.get("duration"),
+        }
+
+    except Exception as e:
+        log(
+            "DEBUG",
+            f"ffprobe details failed for "
+            f"{path.name}: {e}"
+        )
+
+        return None
+
+
+def probe_media_duration(path):
+    try:
+        p = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(path),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=FFPROBE_TIMEOUT,
+        )
+
+        if p.returncode == 0:
+
+            value = float(
+                (p.stdout or "").strip()
+            )
+
+            if value > 0:
+                return value
+
+    except Exception:
+        pass
+
+    return None
+
+
+# ============================================================================
+# CHUNK MODEL
+# ============================================================================
 
 class Chunk:
 
@@ -501,7 +697,9 @@ class Chunk:
         )
 
     def to_dict(self):
+
         with self.lock:
+
             size = (
                 self.path.stat().st_size
                 if self.path.exists()
@@ -524,6 +722,10 @@ class Chunk:
                 "error": self.error,
             }
 
+
+# ============================================================================
+# DOWNLOAD SESSION
+# ============================================================================
 
 class DownloadSession:
 
@@ -549,6 +751,7 @@ class DownloadSession:
         )
 
         self.original_url = None
+
         self.status = "loading"
         self.error_message = None
 
@@ -578,11 +781,6 @@ class DownloadSession:
         self.chunk_wake = threading.Event()
         self.chunk_stop = threading.Event()
 
-        self.frontier_start = 0.0
-        self.frontier_cursor = 0.0
-        self.frontier_step = 0
-
-        self.active_chunk = None
         self.requested_target = 0.0
         self.current_playback_chunk = None
 
@@ -597,23 +795,22 @@ class DownloadSession:
 
     @property
     def final_file(self):
+
         if (
             self.full_file
             and self.full_file.exists()
         ):
             return self.full_file
 
-        p = (
-            self.cache_dir
-            / "full.mp4"
-        )
+        p = self.cache_dir / "full.mp4"
 
-        return (
-            p
-            if p.exists()
+        if (
+            p.exists()
             and self.full_done
-            else None
-        )
+        ):
+            return p
+
+        return None
 
     def record_full(
         self,
@@ -624,18 +821,15 @@ class DownloadSession:
         now = time.time()
 
         with self.lock:
+
             self.full_downloaded = int(
                 n or 0
             )
 
             if total:
-                self.full_total = int(
-                    total
-                )
+                self.full_total = int(total)
 
-            self.full_exact = bool(
-                exact
-            )
+            self.full_exact = bool(exact)
 
             self._rate.append(
                 (
@@ -647,12 +841,12 @@ class DownloadSession:
             cutoff = now - 5
 
             self._rate = [
-                x
-                for x in self._rate
+                x for x in self._rate
                 if x[0] >= cutoff
             ]
 
             if len(self._rate) >= 2:
+
                 a = self._rate[0]
                 b = self._rate[-1]
 
@@ -660,25 +854,33 @@ class DownloadSession:
                     0,
                     (
                         b[1] - a[1]
-                    )
-                    / max(
+                    ) / max(
                         0.5,
                         b[0] - a[0]
-                    ),
+                    )
                 )
 
     def progress(self):
+
         with self.lock:
+
             if self.full_total:
+
                 return min(
                     100.0,
-                    self.full_downloaded
-                    / self.full_total
-                    * 100,
+                    (
+                        self.full_downloaded
+                        / self.full_total
+                        * 100
+                    )
                 )
 
             return None
 
+
+# ============================================================================
+# CHUNK PATH / TIMELINE
+# ============================================================================
 
 def chunk_path(
     s,
@@ -696,432 +898,11 @@ def chunk_path(
     )
 
 
-def probe_media_details(path):
-    try:
-        p = subprocess.run(
-            [
-                "ffprobe",
-                "-v",
-                "error",
-                "-show_entries",
-                "format=duration,start_time:"
-                "stream=index,codec_type,"
-                "start_time,duration",
-                "-of",
-                "json",
-                str(path),
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=FFPROBE_TIMEOUT,
-        )
-
-        if p.returncode != 0:
-            return None
-
-        data = json.loads(
-            p.stdout or "{}"
-        )
-
-        streams = (
-            data.get("streams")
-            or []
-        )
-
-        video = next(
-            (
-                x
-                for x in streams
-                if x.get("codec_type")
-                == "video"
-            ),
-            {},
-        )
-
-        audio = next(
-            (
-                x
-                for x in streams
-                if x.get("codec_type")
-                == "audio"
-            ),
-            {},
-        )
-
-        return {
-            "streams": len(streams),
-            "format_duration": (
-                data.get("format", {})
-                .get("duration")
-            ),
-            "format_start": (
-                data.get("format", {})
-                .get("start_time")
-            ),
-            "video_start": video.get(
-                "start_time"
-            ),
-            "audio_start": audio.get(
-                "start_time"
-            ),
-            "video_duration": video.get(
-                "duration"
-            ),
-            "audio_duration": audio.get(
-                "duration"
-            ),
-        }
-
-    except Exception as e:
-        log(
-            "DEBUG",
-            f"ffprobe details failed "
-            f"for {path.name}: {e}"
-        )
-
-        return None
-
-
-def probe_media_duration(path):
-    try:
-        p = subprocess.run(
-            [
-                "ffprobe",
-                "-v",
-                "error",
-                "-show_entries",
-                "format=duration",
-                "-of",
-                "default="
-                "noprint_wrappers=1:"
-                "nokey=1",
-                str(path),
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=FFPROBE_TIMEOUT,
-        )
-
-        if p.returncode == 0:
-            value = float(
-                (p.stdout or "").strip()
-            )
-
-            if value > 0:
-                return value
-
-    except Exception:
-        pass
-
-    return None
-
-
-def _expected_segment_bounds(
-    sequence_start,
-    segment_index,
-    total_duration
-):
-    if segment_index <= 0:
-        rel_start = 0.0
-        rel_end = min(
-            3.0,
-            max(
-                0.0,
-                total_duration
-                - sequence_start,
-            ),
-        )
-
-    elif segment_index == 1:
-        rel_start = 3.0
-        rel_end = min(
-            8.0,
-            max(
-                0.0,
-                total_duration
-                - sequence_start,
-            ),
-        )
-
-    else:
-        rel_start = (
-            8.0
-            + (
-                segment_index - 2
-            ) * 10.0
-        )
-
-        rel_end = min(
-            rel_start + 10.0,
-            max(
-                0.0,
-                total_duration
-                - sequence_start,
-            ),
-        )
-
-    return (
-        sequence_start + rel_start,
-        sequence_start + rel_end,
-    )
-
-
-def _register_sequence_segments(
-    s,
-    stop_reason=None
-):
+def _build_segment_times(relative_duration):
     """
-    Register segments on the SOURCE timeline.
-
-    Requested source boundaries remain authoritative.
+    3 seconds, then 5 seconds, then 10 seconds forever.
     """
 
-    with s.sequence_lock:
-        seqdir = s.sequence_dir
-        base = s.sequence_index_base
-        seq_start = s.sequence_start
-
-    if not seqdir or not seqdir.exists():
-        return
-
-    files = sorted(
-        seqdir.glob("seg_*.mp4")
-    )
-
-    for path in files:
-        try:
-            n = int(
-                path.stem.split("_")[-1]
-            )
-        except Exception:
-            continue
-
-        idx = base + n
-
-        with s.chunk_lock:
-            if (
-                idx in s.chunks
-                and s.chunks[idx].status
-                == "complete"
-            ):
-                continue
-
-        actual = probe_media_duration(
-            path
-        )
-
-        if actual is None:
-            continue
-
-        (
-            expected_start,
-            expected_end,
-        ) = _expected_segment_bounds(
-            seq_start,
-            n,
-            s.duration,
-        )
-
-        actual_probe = probe_media_details(
-            path
-        )
-
-        with s.chunk_lock:
-            if (
-                idx in s.chunks
-                and s.chunks[idx].status
-                == "complete"
-            ):
-                continue
-
-            start = expected_start
-            end = expected_end
-
-            if end <= start + 0.001:
-                continue
-
-            c = Chunk(
-                idx,
-                start,
-                end,
-                path,
-            )
-
-            c.actual_duration = actual
-            c.status = "complete"
-
-            s.chunks[idx] = c
-
-            s.next_chunk_index = max(
-                s.next_chunk_index,
-                idx + 1,
-            )
-
-            if (
-                s.current_playback_chunk
-                is None
-            ):
-                s.current_playback_chunk = idx
-
-        drift_start = (
-            start - expected_start
-        )
-
-        drift_end = (
-            end - expected_end
-        )
-
-        log(
-            "CHUNK",
-            f"{s.video_id}: segment "
-            f"{idx} READY "
-            f"(SOURCE TIMELINE AUTHORITY)",
-        )
-
-        log(
-            "TIMELINE",
-            f"{s.video_id}: seg={idx} "
-            f"REQUESTED "
-            f"[{expected_start:.3f},"
-            f"{expected_end:.3f}] "
-            f"ACTUAL "
-            f"[{start:.3f},"
-            f"{end:.3f}] "
-            f"duration={actual:.3f}s "
-            f"drift_start="
-            f"{drift_start:+.3f}s "
-            f"drift_end="
-            f"{drift_end:+.3f}s",
-        )
-
-        if actual_probe:
-            log(
-                "MEDIA",
-                f"{s.video_id}: seg={idx} "
-                f"streams="
-                f"{actual_probe.get('streams')} "
-                f"format_duration="
-                f"{actual_probe.get('format_duration')} "
-                f"format_start="
-                f"{actual_probe.get('format_start')} "
-                f"video_start="
-                f"{actual_probe.get('video_start')} "
-                f"audio_start="
-                f"{actual_probe.get('audio_start')} "
-                f"video_dur="
-                f"{actual_probe.get('video_duration')} "
-                f"audio_dur="
-                f"{actual_probe.get('audio_duration')}",
-            )
-
-        expected_duration = max(
-            0.0,
-            expected_end - expected_start,
-        )
-
-        duration_error = (
-            actual - expected_duration
-        )
-
-        if abs(duration_error) > 0.15:
-            log(
-                "WARNING",
-                f"{s.video_id}: "
-                f"PHYSICAL DURATION "
-                f"MISMATCH seg={idx}: "
-                f"expected="
-                f"{expected_duration:.3f}s "
-                f"actual="
-                f"{actual:.3f}s "
-                f"error="
-                f"{duration_error:+.3f}s",
-            )
-
-        if abs(duration_error) > 0.75:
-            log(
-                "ERROR",
-                f"{s.video_id}: "
-                f"CHUNK MAY BE INVALID "
-                f"seg={idx}: "
-                f"expected "
-                f"{expected_duration:.3f}s "
-                f"but file contains "
-                f"{actual:.3f}s",
-            )
-
-        if abs(drift_end) > 0.75:
-            log(
-                "WARNING",
-                f"{s.video_id}: "
-                f"LARGE TIMELINE DRIFT "
-                f"on segment {idx}: "
-                f"{drift_end:+.3f}s",
-            )
-
-
-def _stop_sequence(
-    s,
-    reason="stop",
-    graceful=False
-):
-    with s.sequence_lock:
-        p = s.sequence_process
-        s.sequence_process = None
-        s.sequence_generation += 1
-
-    if p and p.poll() is None:
-        log(
-            "CHUNK",
-            f"{s.video_id}: stopping "
-            f"FFmpeg sequence ({reason})",
-        )
-
-        if graceful:
-            try:
-                if p.stdin:
-                    p.stdin.write(b"q\n")
-                    p.stdin.flush()
-            except Exception:
-                pass
-
-            try:
-                p.wait(timeout=5)
-            except Exception:
-                pass
-
-        if p.poll() is None:
-            try:
-                p.terminate()
-            except Exception:
-                pass
-
-            try:
-                p.wait(timeout=2)
-            except Exception:
-                pass
-
-        if p.poll() is None:
-            try:
-                p.kill()
-            except Exception:
-                pass
-
-            try:
-                p.wait(timeout=3)
-            except Exception:
-                pass
-
-    _register_sequence_segments(
-        s,
-        stop_reason=reason
-    )
-
-
-def _build_segment_times(
-    relative_duration
-):
     cuts = []
 
     t = 3.0
@@ -1148,19 +929,437 @@ def _build_segment_times(
     return cuts
 
 
-def _start_sequence(s, start):
+def _expected_segment_bounds(
+    sequence_start,
+    segment_index,
+    total_duration
+):
+    """
+    Return requested source timeline boundaries.
+    """
+
+    if segment_index <= 0:
+
+        rel_start = 0.0
+
+        rel_end = min(
+            3.0,
+            max(
+                0.0,
+                total_duration - sequence_start
+            )
+        )
+
+    elif segment_index == 1:
+
+        rel_start = 3.0
+
+        rel_end = min(
+            8.0,
+            max(
+                0.0,
+                total_duration - sequence_start
+            )
+        )
+
+    else:
+
+        rel_start = (
+            8.0
+            + (
+                segment_index - 2
+            ) * 10.0
+        )
+
+        rel_end = min(
+            rel_start + 10.0,
+            max(
+                0.0,
+                total_duration - sequence_start
+            )
+        )
+
+    return (
+        sequence_start + rel_start,
+        sequence_start + rel_end
+    )
+
+
+# ============================================================================
+# CHUNK PROCESS MANAGEMENT
+# ============================================================================
+
+def kill_chunk_process(
+    chunk,
+    pause=False
+):
+    """
+    Compatibility helper for older chunk-worker logic.
+
+    V13 primarily uses continuous FFmpeg sequences, but this safely handles
+    any legacy Chunk process if one exists.
+    """
+
+    if chunk is None:
+        return
+
+    try:
+
+        p = chunk.process
+
+        if not p:
+            return
+
+        if p.poll() is None:
+
+            try:
+                p.terminate()
+            except Exception:
+                pass
+
+            try:
+                p.wait(timeout=2)
+            except Exception:
+                pass
+
+            if p.poll() is None:
+
+                try:
+                    p.kill()
+                except Exception:
+                    pass
+
+                try:
+                    p.wait(timeout=2)
+                except Exception:
+                    pass
+
+        chunk.process = None
+
+    except Exception as e:
+
+        log(
+            "DEBUG",
+            f"chunk process cleanup failed: {e}"
+        )
+
+
+def _register_sequence_segments(
+    s,
+    stop_reason=None
+):
+    """
+    Register FFmpeg-created segment files on the SOURCE timeline.
+
+    Physical encoded duration is stored separately for diagnostics.
+    Requested source timeline remains authoritative.
+    """
+
+    with s.sequence_lock:
+
+        seqdir = s.sequence_dir
+        base = s.sequence_index_base
+        seq_start = s.sequence_start
+
+    if (
+        not seqdir
+        or not seqdir.exists()
+    ):
+        return
+
+    files = sorted(
+        seqdir.glob("seg_*.mp4")
+    )
+
+    for path in files:
+
+        try:
+            n = int(
+                path.stem.split("_")[-1]
+            )
+
+        except Exception:
+            continue
+
+        idx = base + n
+
+        with s.chunk_lock:
+
+            if (
+                idx in s.chunks
+                and s.chunks[idx].status
+                == "complete"
+            ):
+                continue
+
+        actual = probe_media_duration(
+            path
+        )
+
+        if actual is None:
+            continue
+
+        (
+            expected_start,
+            expected_end
+        ) = _expected_segment_bounds(
+            seq_start,
+            n,
+            s.duration
+        )
+
+        actual_probe = probe_media_details(
+            path
+        )
+
+        with s.chunk_lock:
+
+            if (
+                idx in s.chunks
+                and s.chunks[idx].status
+                == "complete"
+            ):
+                continue
+
+            start = expected_start
+            end = expected_end
+
+            if end <= start + 0.001:
+                continue
+
+            c = Chunk(
+                idx,
+                start,
+                end,
+                path
+            )
+
+            c.actual_duration = actual
+            c.status = "complete"
+
+            s.chunks[idx] = c
+
+            s.next_chunk_index = max(
+                s.next_chunk_index,
+                idx + 1
+            )
+
+            if (
+                s.current_playback_chunk
+                is None
+            ):
+                s.current_playback_chunk = idx
+
+        drift_start = (
+            start - expected_start
+        )
+
+        drift_end = (
+            end - expected_end
+        )
+
+        log(
+            "CHUNK",
+            (
+                f"{s.video_id}: "
+                f"segment {idx} READY "
+                f"(SOURCE TIMELINE AUTHORITY)"
+            )
+        )
+
+        log(
+            "TIMELINE",
+            (
+                f"{s.video_id}: "
+                f"seg={idx} "
+                f"REQUESTED "
+                f"[{expected_start:.3f},"
+                f"{expected_end:.3f}] "
+                f"ACTUAL "
+                f"[{start:.3f},"
+                f"{end:.3f}] "
+                f"duration={actual:.3f}s "
+                f"drift_start={drift_start:+.3f}s "
+                f"drift_end={drift_end:+.3f}s"
+            )
+        )
+
+        if actual_probe:
+
+            log(
+                "MEDIA",
+                (
+                    f"{s.video_id}: "
+                    f"seg={idx} "
+                    f"streams="
+                    f"{actual_probe.get('streams')} "
+                    f"format_duration="
+                    f"{actual_probe.get('format_duration')} "
+                    f"format_start="
+                    f"{actual_probe.get('format_start')} "
+                    f"video_start="
+                    f"{actual_probe.get('video_start')} "
+                    f"audio_start="
+                    f"{actual_probe.get('audio_start')} "
+                    f"video_dur="
+                    f"{actual_probe.get('video_duration')} "
+                    f"audio_dur="
+                    f"{actual_probe.get('audio_duration')}"
+                )
+            )
+
+        expected_duration = max(
+            0.0,
+            expected_end - expected_start
+        )
+
+        duration_error = (
+            actual - expected_duration
+        )
+
+        if abs(duration_error) > 0.15:
+
+            log(
+                "WARNING",
+                (
+                    f"{s.video_id}: "
+                    f"PHYSICAL DURATION MISMATCH "
+                    f"seg={idx}: "
+                    f"expected="
+                    f"{expected_duration:.3f}s "
+                    f"actual="
+                    f"{actual:.3f}s "
+                    f"error="
+                    f"{duration_error:+.3f}s"
+                )
+            )
+
+        if abs(duration_error) > 0.75:
+
+            log(
+                "ERROR",
+                (
+                    f"{s.video_id}: "
+                    f"CHUNK MAY BE INVALID "
+                    f"seg={idx}: "
+                    f"expected "
+                    f"{expected_duration:.3f}s "
+                    f"but file contains "
+                    f"{actual:.3f}s"
+                )
+            )
+
+        if abs(drift_end) > 0.75:
+
+            log(
+                "WARNING",
+                (
+                    f"{s.video_id}: "
+                    f"LARGE TIMELINE DRIFT "
+                    f"on segment {idx}: "
+                    f"{drift_end:+.3f}s"
+                )
+            )
+
+
+def _stop_sequence(
+    s,
+    reason="stop",
+    graceful=False
+):
+    with s.sequence_lock:
+
+        p = s.sequence_process
+
+        s.sequence_process = None
+
+        s.sequence_generation += 1
+
+    if (
+        p
+        and p.poll() is None
+    ):
+
+        log(
+            "CHUNK",
+            (
+                f"{s.video_id}: "
+                f"stopping FFmpeg sequence "
+                f"({reason})"
+            )
+        )
+
+        if graceful:
+
+            try:
+
+                if p.stdin:
+
+                    p.stdin.write(
+                        b"q\n"
+                    )
+
+                    p.stdin.flush()
+
+            except Exception:
+                pass
+
+            try:
+                p.wait(timeout=5)
+            except Exception:
+                pass
+
+        if p.poll() is None:
+
+            try:
+                p.terminate()
+            except Exception:
+                pass
+
+            try:
+                p.wait(timeout=2)
+            except Exception:
+                pass
+
+        if p.poll() is None:
+
+            try:
+                p.kill()
+            except Exception:
+                pass
+
+            try:
+                p.wait(timeout=3)
+            except Exception:
+                pass
+
+    _register_sequence_segments(
+        s,
+        stop_reason=reason
+    )
+
+
+# ============================================================================
+# START CONTINUOUS FFMPEG SEQUENCE
+# ============================================================================
+
+def _start_sequence(
+    s,
+    start
+):
     start = max(
         0.0,
         min(
             float(start),
             max(
                 0.0,
-                s.duration - 0.02,
-            ),
-        ),
+                s.duration - 0.02
+            )
+        )
     )
 
     with s.lock:
+
         if s.full_done:
             return False
 
@@ -1170,6 +1369,7 @@ def _start_sequence(s, start):
     )
 
     with s.sequence_lock:
+
         generation = (
             s.sequence_generation
         )
@@ -1209,10 +1409,13 @@ def _start_sequence(s, start):
     )
 
     if s.progressive_fmt:
+
         inputs = [
             s.progressive_fmt
         ]
+
     else:
+
         inputs = [
             s.video_fmt,
             s.audio_fmt
@@ -1227,9 +1430,10 @@ def _start_sequence(s, start):
     ]
 
     for fmt in inputs:
+
         cmd += [
             "-ss",
-            f"{start:.3f}",
+            f"{start:.3f}"
         ]
 
         cmd += ffmpeg_input_args(
@@ -1243,36 +1447,39 @@ def _start_sequence(s, start):
 
     cmd += [
         "-map",
-        "0:v:0",
+        "0:v:0"
     ]
 
     if len(inputs) == 1:
+
         cmd += [
             "-map",
-            "0:a:0?",
+            "0:a:0?"
         ]
+
     else:
+
         cmd += [
             "-map",
-            "1:a:0",
+            "1:a:0"
         ]
 
     encode_v = available_h264_encoder()
 
     if not encode_v:
+
         log(
             "ERROR",
-            f"{s.video_id}: FFmpeg has "
-            f"neither h264_amf nor "
-            f"libx264; cannot build "
-            f"exact playback chunks",
+            (
+                f"{s.video_id}: "
+                f"FFmpeg has neither "
+                f"h264_amf nor libx264"
+            )
         )
 
         return False
 
     encode_a = "aac"
-
-    force_keys = cut_arg
 
     cmd += [
         "-c:v",
@@ -1280,6 +1487,7 @@ def _start_sequence(s, start):
     ]
 
     if encode_v == "h264_amf":
+
         cmd += [
             "-quality",
             "speed",
@@ -1290,7 +1498,9 @@ def _start_sequence(s, start):
             "-qp_p",
             "25",
         ]
+
     else:
+
         cmd += [
             "-preset",
             "ultrafast",
@@ -1302,11 +1512,7 @@ def _start_sequence(s, start):
         "-pix_fmt",
         "yuv420p",
         "-force_key_frames",
-        (
-            force_keys
-            if force_keys
-            else "0"
-        ),
+        cut_arg if cut_arg else "0",
         "-c:a",
         encode_a,
         "-b:a",
@@ -1322,8 +1528,12 @@ def _start_sequence(s, start):
         "-segment_format",
         "mp4",
         "-segment_format_options",
-        "movflags=+frag_keyframe+"
-        "empty_moov+default_base_moof",
+        (
+            "movflags="
+            "+frag_keyframe"
+            "+empty_moov"
+            "+default_base_moof"
+        ),
         "-reset_timestamps",
         "1",
         "-segment_start_number",
@@ -1331,14 +1541,17 @@ def _start_sequence(s, start):
     ]
 
     if cut_arg:
+
         cmd += [
             "-segment_times",
-            cut_arg,
+            cut_arg
         ]
+
     else:
+
         cmd += [
             "-segment_time",
-            "10",
+            "10"
         ]
 
     cmd += [
@@ -1350,57 +1563,79 @@ def _start_sequence(s, start):
 
     log(
         "CHUNK",
-        f"{s.video_id}: starting "
-        f"continuous sequence at "
-        f"{start:.3f}s; "
-        f"cuts=3/5/10s; "
-        f"segments={len(cuts)+1}",
+        (
+            f"{s.video_id}: "
+            f"starting continuous sequence "
+            f"at {start:.3f}s; "
+            f"cuts=3/5/10s; "
+            f"segments={len(cuts) + 1}"
+        )
     )
 
     log(
         "FFMPEG",
-        f"{s.video_id}: sequence "
-        f"output={seqdir} "
-        f"relative_cuts="
-        f"{cut_arg or 'none'}",
+        (
+            f"{s.video_id}: "
+            f"sequence output={seqdir} "
+            f"relative_cuts="
+            f"{cut_arg or 'none'}"
+        )
     )
 
     log(
         "FFMPEG",
-        f"{s.video_id}: V13 playback "
-        f"encoder={encode_v} + "
-        f"continuous AAC 160k; "
-        f"forced_keyframes="
-        f"{cut_arg or 'none'}",
+        (
+            f"{s.video_id}: "
+            f"playback encoder={encode_v} "
+            f"+ continuous AAC 160k; "
+            f"forced_keyframes="
+            f"{cut_arg or 'none'}"
+        )
+    )
+
+    video_id = (
+        s.video_fmt.get("format_id")
+        if s.video_fmt
+        else (
+            s.progressive_fmt.get("format_id")
+            if s.progressive_fmt
+            else None
+        )
+    )
+
+    audio_id = (
+        s.audio_fmt.get("format_id")
+        if s.audio_fmt
+        else "embedded"
     )
 
     log(
         "FFMPEG",
-        f"{s.video_id}: "
-        f"video_format="
-        f"{s.video_fmt.get('format_id') "
-        f"if s.video_fmt else "
-        f"s.progressive_fmt.get('format_id') "
-        f"if s.progressive_fmt else None} "
-        f"audio_format="
-        f"{s.audio_fmt.get('format_id') "
-        f"if s.audio_fmt else 'embedded'}",
+        (
+            f"{s.video_id}: "
+            f"video_format={video_id} "
+            f"audio_format={audio_id}"
+        )
     )
 
     try:
+
         p = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             stdin=subprocess.PIPE,
         )
 
     except Exception as e:
+
         log(
             "ERROR",
-            f"{s.video_id}: failed to "
-            f"start FFmpeg sequence: "
-            f"{e}",
+            (
+                f"{s.video_id}: "
+                f"failed to start FFmpeg "
+                f"sequence: {e}"
+            )
         )
 
         return False
@@ -1412,7 +1647,9 @@ def _start_sequence(s, start):
 
 
 def _sequence_process_alive(s):
+
     with s.sequence_lock:
+
         p = s.sequence_process
 
     return bool(
@@ -1422,25 +1659,34 @@ def _sequence_process_alive(s):
 
 
 def _finalize_sequence_process(s):
+
     with s.sequence_lock:
         p = s.sequence_process
 
-    if not p or p.poll() is None:
+    if not p:
+        return
+
+    if p.poll() is None:
         return
 
     try:
-        err = (
-            p.stderr.read()
-            if p.stderr
-            else b""
-        )
+
+        if p.stderr:
+
+            err = p.stderr.read()
+
+        else:
+
+            err = b""
 
     except Exception:
+
         err = b""
 
     code = p.returncode
 
     with s.sequence_lock:
+
         if s.sequence_process is p:
             s.sequence_process = None
 
@@ -1454,23 +1700,31 @@ def _finalize_sequence_process(s):
         and not s.chunk_stop.is_set()
         and not s.full_done
     ):
+
         if isinstance(err, bytes):
-            text = (
-                err.decode(
-                    "utf-8",
-                    "replace"
-                )[-3000:]
-            )
+
+            text = err.decode(
+                "utf-8",
+                "replace"
+            )[-3000:]
+
         else:
+
             text = str(err)[-3000:]
 
         log(
             "ERROR",
-            f"{s.video_id}: continuous "
-            f"FFmpeg sequence exited "
-            f"{code}: {text}",
+            (
+                f"{s.video_id}: "
+                f"continuous FFmpeg sequence "
+                f"exited {code}: {text}"
+            )
         )
 
+
+# ============================================================================
+# CHUNK LOOKUP
+# ============================================================================
 
 def find_chunk_covering(
     s,
@@ -1478,9 +1732,11 @@ def find_chunk_covering(
     include_incomplete=True
 ):
     with s.chunk_lock:
+
         candidates = []
 
         for c in s.chunks.values():
+
             if (
                 not include_incomplete
                 and c.status != "complete"
@@ -1508,7 +1764,12 @@ def find_chunk_covering(
         return candidates[0]
 
 
+# ============================================================================
+# DELETE TEMPORARY CHUNKS
+# ============================================================================
+
 def delete_chunks(s):
+
     _stop_sequence(
         s,
         "full download finished"
@@ -1520,7 +1781,9 @@ def delete_chunks(s):
     for seqdir in s.cache_dir.glob(
         "sequence_*"
     ):
+
         if seqdir.is_dir():
+
             shutil.rmtree(
                 seqdir,
                 ignore_errors=True
@@ -1528,24 +1791,31 @@ def delete_chunks(s):
 
     log(
         "STATUS",
-        f"{s.video_id}: full download "
-        f"finished; temporary playback "
-        f"chunks deleted",
+        (
+            f"{s.video_id}: "
+            f"full download finished; "
+            f"temporary playback chunks deleted"
+        )
     )
 
 
+# ============================================================================
+# CHUNK WORKER
+# ============================================================================
+
 def chunk_worker(s):
-    """Maintain one continuous FFmpeg sequence per playback path."""
 
     last_diag = 0.0
 
     while not s.chunk_stop.is_set():
 
         with s.lock:
+
             if s.full_done:
                 break
 
         _register_sequence_segments(s)
+
         _finalize_sequence_process(s)
 
         target = s.requested_target
@@ -1558,14 +1828,20 @@ def chunk_worker(s):
 
         now = time.time()
 
-        if now - last_diag >= 1.0:
+        if (
+            now - last_diag
+            >= 1.0
+        ):
 
             with s.chunk_lock:
+
                 summary = ", ".join(
-                    f"{c.index}:"
-                    f"{c.start:.2f}-"
-                    f"{c.end:.2f}:"
-                    f"{c.status}"
+                    (
+                        f"{c.index}:"
+                        f"{c.start:.2f}-"
+                        f"{c.end:.2f}:"
+                        f"{c.status}"
+                    )
                     for c in sorted(
                         s.chunks.values(),
                         key=lambda x: x.index
@@ -1573,6 +1849,7 @@ def chunk_worker(s):
                 )
 
             with s.sequence_lock:
+
                 seq_alive = bool(
                     s.sequence_process
                     and s.sequence_process.poll()
@@ -1587,16 +1864,19 @@ def chunk_worker(s):
 
             log(
                 "DEBUG",
-                f"{s.video_id}: "
-                f"target={target:.3f}s "
-                f"covered="
-                f"{covered.index if covered else None} "
-                f"current="
-                f"{s.current_playback_chunk} "
-                f"sequence_alive="
-                f"{seq_alive} "
-                f"seqdir={seqdir_now} "
-                f"chunks=[{summary}]",
+                (
+                    f"{s.video_id}: "
+                    f"target={target:.3f}s "
+                    f"covered="
+                    f"{covered.index if covered else None} "
+                    f"current="
+                    f"{s.current_playback_chunk} "
+                    f"sequence_alive="
+                    f"{seq_alive} "
+                    f"seqdir="
+                    f"{seqdir_now} "
+                    f"chunks=[{summary}]"
+                )
             )
 
             last_diag = now
@@ -1609,36 +1889,41 @@ def chunk_worker(s):
                 )
 
             if _sequence_process_alive(s):
-                time.sleep(0.15)
+
+                time.sleep(
+                    POLL_INTERVAL
+                )
+
                 continue
 
         if not _sequence_process_alive(s):
 
             if covered is None:
+
                 _start_sequence(
                     s,
                     target
                 )
 
             else:
+
                 with s.chunk_lock:
+
                     later = sorted(
                         [
                             c
                             for c in s.chunks.values()
                             if (
-                                c.status
-                                == "complete"
+                                c.status == "complete"
                                 and c.start
                                 >= covered.end - 0.01
                             )
                         ],
-                        key=lambda c: c.start,
+                        key=lambda c: c.start
                     )
 
-                if later:
-                    pass
-                else:
+                if not later:
+
                     _start_sequence(
                         s,
                         covered.end
@@ -1647,7 +1932,14 @@ def chunk_worker(s):
         time.sleep(0.12)
 
 
-def request_seek(s, target):
+# ============================================================================
+# SEEK
+# ============================================================================
+
+def request_seek(
+    s,
+    target
+):
     target = max(
         0.0,
         min(
@@ -1655,14 +1947,20 @@ def request_seek(s, target):
             max(
                 0.0,
                 s.duration - 0.02
-            ),
-        ),
+            )
+        )
     )
 
     with s.lock:
+
         if s.full_done:
+
             s.requested_target = target
-            return target, "full"
+
+            return (
+                target,
+                "full"
+            )
 
     existing = find_chunk_covering(
         s,
@@ -1670,35 +1968,50 @@ def request_seek(s, target):
         include_incomplete=True
     )
 
-    with s.chunk_lock:
-        active_sequence = (
-            _sequence_process_alive(s)
-        )
+    active_sequence = (
+        _sequence_process_alive(s)
+    )
 
-        if existing:
-            s.requested_target = target
+    if existing:
+
+        s.requested_target = target
+
+        with s.chunk_lock:
+
             s.current_playback_chunk = (
                 existing.index
             )
-            s.chunk_wake.set()
 
-            return (
-                target,
-                existing.status
-            )
-
-        if active_sequence:
-            _stop_sequence(
-                s,
-                "far seek"
-            )
-
-        s.requested_target = target
-        s.current_playback_chunk = None
         s.chunk_wake.set()
 
-        return target, "new"
+        return (
+            target,
+            existing.status
+        )
 
+    if active_sequence:
+
+        _stop_sequence(
+            s,
+            "far seek"
+        )
+
+    s.requested_target = target
+
+    with s.chunk_lock:
+        s.current_playback_chunk = None
+
+    s.chunk_wake.set()
+
+    return (
+        target,
+        "new"
+    )
+
+
+# ============================================================================
+# FULL DOWNLOAD
+# ============================================================================
 
 def full_download_worker(
     s,
@@ -1710,7 +2023,9 @@ def full_download_worker(
     )
 
     try:
+
         if s.progressive_fmt:
+
             fmt_expr = str(
                 s.progressive_fmt.get(
                     "format_id"
@@ -1721,6 +2036,7 @@ def full_download_worker(
             s.video_fmt
             and s.audio_fmt
         ):
+
             fmt_expr = (
                 f"{s.video_fmt.get('format_id')}"
                 f"+"
@@ -1728,16 +2044,20 @@ def full_download_worker(
             )
 
         else:
+
             fmt_expr = (
                 "bestvideo[ext=mp4]"
                 "+bestaudio[ext=m4a]"
-                "/best[ext=mp4]/best"
+                "/best[ext=mp4]"
+                "/best"
             )
 
         def hook(d):
+
             st = d.get("status")
 
             if st == "downloading":
+
                 total = (
                     d.get("total_bytes")
                     or d.get(
@@ -1753,12 +2073,12 @@ def full_download_worker(
                 s.record_full(
                     got,
                     total,
-                    d.get(
-                        "total_bytes"
-                    ) is not None,
+                    d.get("total_bytes")
+                    is not None
                 )
 
             elif st == "finished":
+
                 got = (
                     d.get("downloaded_bytes")
                     or 0
@@ -1772,64 +2092,38 @@ def full_download_worker(
                 s.record_full(
                     got,
                     total,
-                    d.get(
-                        "total_bytes"
-                    ) is not None,
+                    d.get("total_bytes")
+                    is not None
                 )
 
-        opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "noplaylist": True,
-            "outtmpl": outtmpl,
-            "format": fmt_expr,
-            "merge_output_format": "mp4",
-            "progress_hooks": [hook],
-            "retries": 5,
-            "fragment_retries": 5,
-        }
+        opts = yt_dlp_options(
+            {
+                "quiet": True,
+                "no_warnings": True,
+                "noplaylist": True,
+                "outtmpl": outtmpl,
+                "format": fmt_expr,
+                "merge_output_format": "mp4",
+                "progress_hooks": [hook],
+                "retries": 5,
+                "fragment_retries": 5,
+            }
+        )
 
-        if Path(
-            YTDLP_COOKIE_FILE
-        ).is_file():
+        with yt_dlp.YoutubeDL(opts) as ydl:
 
-            opts["cookiefile"] = (
-                YTDLP_COOKIE_FILE
-            )
-
-            log(
-                "INFO",
-                f"{s.video_id}: yt-dlp "
-                f"using cookie file "
-                f"{YTDLP_COOKIE_FILE}",
-            )
-
-        else:
-            log(
-                "WARNING",
-                f"{s.video_id}: cookie file "
-                f"not found at "
-                f"{YTDLP_COOKIE_FILE}",
-            )
-
-        with yt_dlp.YoutubeDL(
-            opts
-        ) as ydl:
             ydl.download(
                 [s.original_url]
             )
 
         candidates = sorted(
-            s.cache_dir.glob(
-                "full.*"
-            ),
+            s.cache_dir.glob("full.*"),
             key=lambda p: p.stat().st_size,
-            reverse=True,
+            reverse=True
         )
 
         candidates = [
-            p
-            for p in candidates
+            p for p in candidates
             if p.suffix.lower()
             not in (
                 ".part",
@@ -1838,6 +2132,7 @@ def full_download_worker(
         ]
 
         if not candidates:
+
             raise RuntimeError(
                 "yt-dlp finished but "
                 "full output was not found"
@@ -1846,6 +2141,7 @@ def full_download_worker(
         final = candidates[0]
 
         with s.lock:
+
             s.full_file = final
 
             s.chunk_stop.set()
@@ -1865,11 +2161,22 @@ def full_download_worker(
         s.chunk_stop.set()
         s.chunk_wake.set()
 
+        with s.chunk_lock:
+            active = None
+
+        if active:
+            kill_chunk_process(
+                active,
+                pause=False
+            )
+
         log(
             "STATUS",
-            f"{s.video_id}: FULL download "
-            f"complete "
-            f"({fmt_size(final.stat().st_size)})",
+            (
+                f"{s.video_id}: "
+                f"FULL download complete "
+                f"({fmt_size(final.stat().st_size)})"
+            )
         )
 
         delete_chunks(s)
@@ -1877,14 +2184,19 @@ def full_download_worker(
     except Exception as e:
 
         with s.lock:
+
             s.error_message = (
                 f"Full download failed: {e}"
             )
 
+            s.status = "error"
+
         log(
             "ERROR",
-            f"{s.video_id}: full download "
-            f"failed: {e}",
+            (
+                f"{s.video_id}: "
+                f"full download failed: {e}"
+            )
         )
 
         log(
@@ -1893,12 +2205,19 @@ def full_download_worker(
         )
 
 
+# ============================================================================
+# RESOLVE VIDEO
+# ============================================================================
+
 def resolve_and_start(url):
+
     log(
         "INFO",
-        "Resolving metadata for "
-        f"submitted URL "
-        f"({redact_url(url)})",
+        (
+            "Resolving metadata for "
+            f"submitted URL "
+            f"({redact_url(url)})"
+        )
     )
 
     info = extract_info(url)
@@ -1918,10 +2237,12 @@ def resolve_and_start(url):
     )
 
     with SESSIONS_LOCK:
+
         old = SESSIONS.get(vid)
 
-        if old and old.status not in (
-            "error",
+        if (
+            old
+            and old.status != "error"
         ):
             return old
 
@@ -1956,9 +2277,12 @@ def resolve_and_start(url):
 
         log(
             "INFO",
-            f"{vid}: progressive source "
-            f"{progressive.get('format_id')} "
-            f"selected",
+            (
+                f"{vid}: "
+                f"progressive source "
+                f"{progressive.get('format_id')} "
+                f"selected"
+            )
         )
 
     elif (
@@ -1988,13 +2312,16 @@ def resolve_and_start(url):
 
         log(
             "INFO",
-            f"{vid}: adaptive sources "
-            f"video={video.get('format_id')} "
-            f"{video.get('height')}p "
-            f"audio={audio.get('format_id')} "
-            f"lang={alang} "
-            f"note={anote!r} "
-            f"abr={audio.get('abr')}",
+            (
+                f"{vid}: "
+                f"adaptive sources "
+                f"video={video.get('format_id')} "
+                f"{video.get('height')}p "
+                f"audio={audio.get('format_id')} "
+                f"lang={alang} "
+                f"note={anote!r} "
+                f"abr={audio.get('abr')}"
+            )
         )
 
     else:
@@ -2012,7 +2339,7 @@ def resolve_and_start(url):
     s.full_thread = threading.Thread(
         target=full_download_worker,
         args=(s, info),
-        daemon=True,
+        daemon=True
     )
 
     s.full_thread.start()
@@ -2020,7 +2347,7 @@ def resolve_and_start(url):
     s.chunk_worker = threading.Thread(
         target=chunk_worker,
         args=(s,),
-        daemon=True,
+        daemon=True
     )
 
     s.chunk_worker.start()
@@ -2031,6 +2358,10 @@ def resolve_and_start(url):
 
     return s
 
+
+# ============================================================================
+# HTTP HANDLER
+# ============================================================================
 
 class Handler(
     http.server.BaseHTTPRequestHandler
@@ -2047,11 +2378,12 @@ class Handler(
     ):
         pass
 
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
     # CORS
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
 
     def _cors_headers(self):
+
         self.send_header(
             "Access-Control-Allow-Origin",
             "*"
@@ -2069,12 +2401,15 @@ class Handler(
 
         self.send_header(
             "Access-Control-Expose-Headers",
-            "Content-Length, "
-            "Content-Range, "
-            "Accept-Ranges"
+            (
+                "Content-Length, "
+                "Content-Range, "
+                "Accept-Ranges"
+            )
         )
 
     def do_OPTIONS(self):
+
         self.send_response(204)
 
         self._cors_headers()
@@ -2086,9 +2421,9 @@ class Handler(
 
         self.end_headers()
 
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
     # JSON
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
 
     def _json(
         self,
@@ -2105,8 +2440,7 @@ class Handler(
 
         self.send_header(
             "Content-Type",
-            "application/json; "
-            "charset=utf-8"
+            "application/json; charset=utf-8"
         )
 
         self.send_header(
@@ -2133,7 +2467,12 @@ class Handler(
             code
         )
 
+    # ------------------------------------------------------------------------
+    # BODY
+    # ------------------------------------------------------------------------
+
     def _body(self):
+
         n = int(
             self.headers.get(
                 "Content-Length",
@@ -2146,16 +2485,18 @@ class Handler(
                 "request body too large"
             )
 
+        raw = self.rfile.read(n)
+
         return json.loads(
-            self.rfile.read(n).decode()
-            or "{}"
+            raw.decode() or "{}"
         )
 
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
     # GET
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
 
     def do_GET(self):
+
         p = urllib.parse.urlsplit(
             self.path
         )
@@ -2163,11 +2504,13 @@ class Handler(
         try:
 
             if p.path == "/":
+
                 return self._index()
 
             if p.path.startswith(
                 "/api/status/"
             ):
+
                 return self._status(
                     p.path.split("/")[-1]
                 )
@@ -2175,6 +2518,7 @@ class Handler(
             if p.path.startswith(
                 "/api/chunks/"
             ):
+
                 return self._chunks(
                     p.path.split("/")[-1]
                 )
@@ -2182,6 +2526,7 @@ class Handler(
             if p.path.startswith(
                 "/api/full/"
             ):
+
                 return self._full(
                     p.path.split("/")[-1]
                 )
@@ -2189,6 +2534,7 @@ class Handler(
             if p.path.startswith(
                 "/media/full/"
             ):
+
                 return self._serve_named_file(
                     p.path[
                         len("/media/full/"):
@@ -2198,6 +2544,7 @@ class Handler(
             if p.path.startswith(
                 "/media/chunk/"
             ):
+
                 return self._serve_chunk(
                     p.path[
                         len("/media/chunk/"):
@@ -2211,7 +2558,7 @@ class Handler(
 
         except (
             BrokenPipeError,
-            ConnectionResetError,
+            ConnectionResetError
         ):
             pass
 
@@ -2219,22 +2566,28 @@ class Handler(
 
             log(
                 "ERROR",
-                f"GET {self.path}: {e}"
+                (
+                    f"GET {self.path}: "
+                    f"{e}"
+                )
             )
 
             try:
+
                 self._error(
                     "internal server error",
                     500
                 )
+
             except Exception:
                 pass
 
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
     # POST
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
 
     def do_POST(self):
+
         p = urllib.parse.urlsplit(
             self.path
         ).path
@@ -2242,9 +2595,11 @@ class Handler(
         try:
 
             if p == "/api/load":
+
                 return self._load()
 
             if p == "/api/seek":
+
                 return self._seek()
 
             self._error(
@@ -2253,6 +2608,7 @@ class Handler(
             )
 
         except ValueError as e:
+
             self._error(
                 str(e),
                 400
@@ -2262,7 +2618,10 @@ class Handler(
 
             log(
                 "ERROR",
-                f"POST {p}: {e}"
+                (
+                    f"POST {p}: "
+                    f"{e}"
+                )
             )
 
             self._error(
@@ -2270,15 +2629,25 @@ class Handler(
                 500
             )
 
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
     # INDEX
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
 
     def _index(self):
-        body = (
-            Path(__file__).resolve().parent
+
+        index_path = (
+            BASE_DIR
             / "index.html"
-        ).read_bytes()
+        )
+
+        if not index_path.exists():
+
+            return self._error(
+                "index.html is missing",
+                500
+            )
+
+        body = index_path.read_bytes()
 
         self.send_response(200)
 
@@ -2298,42 +2667,51 @@ class Handler(
 
         self.wfile.write(body)
 
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
     # SESSION
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
 
     def _get_session(self, vid):
+
         vid = sanitize_video_id(
             vid
         )
 
         with SESSIONS_LOCK:
+
             s = SESSIONS.get(vid)
 
         if not s:
+
             raise ValueError(
                 "unknown video id"
             )
 
         return s
 
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
     # LOAD
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
 
     def _load(self):
 
         if not YTDLP_AVAILABLE:
+
             return self._error(
-                "yt-dlp is not installed. "
-                "Run: pip install -U yt-dlp",
+                (
+                    "yt-dlp is not installed. "
+                    "Run: pip install -U yt-dlp"
+                ),
                 500
             )
 
         if not FFMPEG_AVAILABLE:
+
             return self._error(
-                "FFmpeg is required for "
-                "chunked playback.",
+                (
+                    "FFmpeg is required for "
+                    "chunked playback."
+                ),
                 500
             )
 
@@ -2348,6 +2726,7 @@ class Handler(
             not url
             or not is_youtube_url(url)
         ):
+
             return self._error(
                 "enter a valid YouTube URL",
                 400
@@ -2355,13 +2734,32 @@ class Handler(
 
         log(
             "INFO",
-            f"URL submitted: "
-            f"{redact_url(url)}"
+            (
+                f"URL submitted: "
+                f"{redact_url(url)}"
+            )
         )
 
-        s = resolve_and_start(
-            url
-        )
+        try:
+
+            s = resolve_and_start(
+                url
+            )
+
+        except Exception as e:
+
+            log(
+                "ERROR",
+                (
+                    f"Metadata extraction "
+                    f"failed: {e}"
+                )
+            )
+
+            return self._error(
+                str(e),
+                500
+            )
 
         self._json(
             {
@@ -2375,11 +2773,12 @@ class Handler(
             }
         )
 
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
     # STATUS
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
 
     def _status(self, vid):
+
         s = self._get_session(
             vid
         )
@@ -2388,52 +2787,33 @@ class Handler(
 
             pct = s.progress()
 
-            full_done = (
-                s.full_done
-            )
+            full_done = s.full_done
 
             data = {
-                "video_id":
-                    s.video_id,
-
-                "title":
-                    s.title,
-
-                "duration":
-                    s.duration,
-
-                "status":
-                    s.status,
-
-                "mode":
-                    s.mode,
-
-                "error":
-                    s.error_message,
-
-                "full_downloaded":
-                    s.full_downloaded,
-
-                "full_total":
-                    s.full_total,
-
-                "full_percent":
-                    pct,
-
-                "full_rate_bps":
-                    s.full_rate,
-
-                "full_done":
-                    full_done,
-
-                "mime":
-                    s.mime,
-
-                "requested_target":
-                    s.requested_target,
-
-                "current_playback_chunk":
-                    s.current_playback_chunk,
+                "video_id": s.video_id,
+                "title": s.title,
+                "duration": s.duration,
+                "status": s.status,
+                "mode": s.mode,
+                "error": s.error_message,
+                "full_downloaded": (
+                    s.full_downloaded
+                ),
+                "full_total": (
+                    s.full_total
+                ),
+                "full_percent": pct,
+                "full_rate_bps": (
+                    s.full_rate
+                ),
+                "full_done": full_done,
+                "mime": s.mime,
+                "requested_target": (
+                    s.requested_target
+                ),
+                "current_playback_chunk": (
+                    s.current_playback_chunk
+                ),
             }
 
         with s.chunk_lock:
@@ -2445,19 +2825,11 @@ class Handler(
                     key=lambda c: (
                         c.start,
                         c.index
-                    ),
+                    )
                 )
             ]
 
-            active = (
-                s.active_chunk.to_dict()
-                if s.active_chunk
-                else None
-            )
-
         data["chunks"] = chunks
-
-        data["active_chunk"] = active
 
         data["coverage_end"] = max(
             [
@@ -2471,61 +2843,65 @@ class Handler(
 
         self._json(data)
 
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
     # CHUNKS
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
 
     def _chunks(self, vid):
+
         s = self._get_session(
             vid
         )
 
         with s.chunk_lock:
 
-            self._json(
-                {
-                    "mime": s.mime,
+            chunks = [
+                c.to_dict()
+                for c in sorted(
+                    s.chunks.values(),
+                    key=lambda c: (
+                        c.start,
+                        c.index
+                    )
+                )
+            ]
 
-                    "chunks": [
-                        c.to_dict()
-                        for c in sorted(
-                            s.chunks.values(),
-                            key=lambda c: (
-                                c.start,
-                                c.index
-                            ),
-                        )
-                    ],
-                }
-            )
+        self._json(
+            {
+                "mime": s.mime,
+                "chunks": chunks,
+            }
+        )
 
-    # ---------------------------------------------------------
-    # FULL
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # FULL FILE
+    # ------------------------------------------------------------------------
 
     def _full(self, vid):
+
         s = self._get_session(
             vid
         )
 
+        final = s.final_file
+
         self._json(
             {
                 "ready": bool(
-                    s.final_file
+                    final
                     and s.full_done
                 ),
-
                 "file": (
-                    s.final_file.name
-                    if s.final_file
+                    final.name
+                    if final
                     else None
                 ),
             }
         )
 
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
     # SEEK
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
 
     def _seek(self):
 
@@ -2546,10 +2922,12 @@ class Handler(
 
         log(
             "SEEK",
-            f"{s.video_id}: seek -> "
-            f"{target:.2f}s "
-            f"action={action} "
-            f"(full download continues)",
+            (
+                f"{s.video_id}: "
+                f"seek -> {target:.2f}s "
+                f"action={action} "
+                f"(full download continues)"
+            )
         )
 
         self._json(
@@ -2560,14 +2938,15 @@ class Handler(
             }
         )
 
-    # ---------------------------------------------------------
-    # FULL VIDEO FILE
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # FULL MEDIA
+    # ------------------------------------------------------------------------
 
     def _serve_named_file(
         self,
         suffix
     ):
+
         parts = (
             suffix
             .strip("/")
@@ -2575,8 +2954,9 @@ class Handler(
         )
 
         if not parts:
+
             return self._error(
-                "invalid video path",
+                "invalid media path",
                 400
             )
 
@@ -2594,23 +2974,23 @@ class Handler(
             not path
             or not path.exists()
         ):
+
             return self._error(
                 "full video is not ready",
                 404
             )
 
-        self._range_file(
-            path
-        )
+        self._range_file(path)
 
-    # ---------------------------------------------------------
-    # CHUNK FILE
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # CHUNK MEDIA
+    # ------------------------------------------------------------------------
 
     def _serve_chunk(
         self,
         suffix
     ):
+
         parts = (
             suffix
             .strip("/")
@@ -2618,6 +2998,7 @@ class Handler(
         )
 
         if len(parts) != 2:
+
             return self._error(
                 "invalid chunk path",
                 400
@@ -2628,11 +3009,13 @@ class Handler(
         )
 
         try:
+
             idx = int(
                 parts[1]
             )
 
         except ValueError:
+
             return self._error(
                 "invalid chunk index",
                 400
@@ -2656,12 +3039,13 @@ class Handler(
 
             ready = bool(
                 c
-                and c.status
-                == "complete"
+                and c.status == "complete"
+                and path
                 and path.exists()
             )
 
         if not ready:
+
             return self._error(
                 "chunk is not ready",
                 404
@@ -2671,15 +3055,23 @@ class Handler(
             path
         )
 
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
     # RANGE FILE
-    # ---------------------------------------------------------
+    # ------------------------------------------------------------------------
 
     def _range_file(
         self,
         path
     ):
+
         total = path.stat().st_size
+
+        if total <= 0:
+
+            return self._error(
+                "empty media file",
+                404
+            )
 
         rh = self.headers.get(
             "Range"
@@ -2697,6 +3089,7 @@ class Handler(
             )
 
             if not m:
+
                 return self._error(
                     "malformed Range",
                     416
@@ -2704,20 +3097,33 @@ class Handler(
 
             a, b = m.groups()
 
-            start = (
-                int(a)
-                if a
-                else max(
-                    0,
-                    total - int(b)
-                )
-            )
+            try:
 
-            end = (
-                int(b)
-                if b
-                else total - 1
-            )
+                if a:
+
+                    start = int(a)
+
+                elif b:
+
+                    start = max(
+                        0,
+                        total - int(b)
+                    )
+
+                if b:
+
+                    end = int(b)
+
+                else:
+
+                    end = total - 1
+
+            except ValueError:
+
+                return self._error(
+                    "malformed Range",
+                    416
+                )
 
             end = min(
                 end,
@@ -2729,6 +3135,7 @@ class Handler(
                 or start >= total
                 or start > end
             ):
+
                 self.send_response(
                     416
                 )
@@ -2738,6 +3145,11 @@ class Handler(
                 self.send_header(
                     "Content-Range",
                     f"bytes */{total}"
+                )
+
+                self.send_header(
+                    "Content-Length",
+                    "0"
                 )
 
                 self.end_headers()
@@ -2750,8 +3162,6 @@ class Handler(
             end - start + 1
         )
 
-        ctype = "video/mp4"
-
         self.send_response(
             code
         )
@@ -2760,7 +3170,7 @@ class Handler(
 
         self.send_header(
             "Content-Type",
-            ctype
+            "video/mp4"
         )
 
         self.send_header(
@@ -2779,11 +3189,13 @@ class Handler(
         )
 
         if code == 206:
+
             self.send_header(
                 "Content-Range",
-                f"bytes "
-                f"{start}-{end}/"
-                f"{total}"
+                (
+                    f"bytes {start}-"
+                    f"{end}/{total}"
+                )
             )
 
         self.end_headers()
@@ -2809,20 +3221,27 @@ class Handler(
                 if not b:
                     break
 
-                self.wfile.write(
-                    b
-                )
+                self.wfile.write(b)
 
                 left -= len(b)
 
+
+# ============================================================================
+# HTTP SERVER
+# ============================================================================
 
 class Server(
     socketserver.ThreadingMixIn,
     http.server.HTTPServer
 ):
+
     daemon_threads = True
     allow_reuse_address = True
 
+
+# ============================================================================
+# MAIN
+# ============================================================================
 
 def find_port():
     return PORT
@@ -2831,8 +3250,7 @@ def find_port():
 def main():
 
     if not (
-        Path(__file__).resolve().parent
-        / "index.html"
+        BASE_DIR / "index.html"
     ).exists():
 
         print(
@@ -2842,30 +3260,21 @@ def main():
         sys.exit(1)
 
     if not YTDLP_AVAILABLE:
+
         print(
-            "WARNING: install yt-dlp with: "
-            "pip install -U yt-dlp"
+            "WARNING: install yt-dlp "
+            "with: pip install -U yt-dlp"
         )
 
     if not FFMPEG_AVAILABLE:
+
         print(
             "WARNING: FFmpeg is required "
             "for chunked playback"
         )
 
-    cookie_exists = Path(
+    cookie_path = Path(
         YTDLP_COOKIE_FILE
-    ).is_file()
-
-    port = find_port()
-
-    httpd = Server(
-        (HOST, port),
-        Handler
-    )
-
-    url = (
-        f"http://127.0.0.1:{port}/"
     )
 
     print("=" * 70)
@@ -2892,12 +3301,22 @@ def main():
 
     print(
         f" Host / Port        : "
-        f"{HOST}:{port}"
+        f"{HOST}:{PORT}"
     )
 
     print(
-        f" Local URL          : "
-        f"{url}"
+        f" Render PORT        : "
+        f"{os.environ.get('PORT', 'not set')}"
+    )
+
+    print(
+        f" Cookie file        : "
+        f"{cookie_path}"
+    )
+
+    print(
+        f" Cookies available  : "
+        f"{'yes' if cookie_path.is_file() else 'NO'}"
     )
 
     print(
@@ -2906,24 +3325,18 @@ def main():
     )
 
     print(
-        f" Cookie file        : "
-        f"{YTDLP_COOKIE_FILE}"
-    )
-
-    print(
-        f" Cookie available   : "
-        f"{'yes' if cookie_exists else 'NO'}"
-    )
-
-    print(
         " Architecture       : "
         "full download + continuous "
         "FFmpeg 3/5/10-second "
-        "segment sequences "
-        "(source-timeline locked)"
+        "segment sequences"
     )
 
     print("=" * 70)
+
+    httpd = Server(
+        (HOST, find_port()),
+        Handler
+    )
 
     threading.Thread(
         target=httpd.serve_forever,
@@ -2932,8 +3345,10 @@ def main():
 
     log(
         "STATUS",
-        f"Server started on "
-        f"{HOST}:{port}"
+        (
+            f"Server started on "
+            f"{HOST}:{PORT}"
+        )
     )
 
     try:
