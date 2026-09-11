@@ -154,8 +154,16 @@ def extract_info(url):
         "no_warnings": True,
         "noplaylist": True,
         "skip_download": True,
-        "cookiefile": YTDLP_COOKIE_FILE,
     }
+
+    if Path(YTDLP_COOKIE_FILE).is_file():
+        opts["cookiefile"] = YTDLP_COOKIE_FILE
+        log("INFO", f"yt-dlp: using cookie file {YTDLP_COOKIE_FILE}")
+    else:
+        log("WARNING", f"yt-dlp: cookie file not found at {YTDLP_COOKIE_FILE}")
+
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        return ydl.extract_info(url, download=False)
 
     with yt_dlp.YoutubeDL(opts) as ydl:
         return ydl.extract_info(url, download=False)
@@ -839,10 +847,15 @@ def full_download_worker(s, info):
             "progress_hooks": [hook],
             "retries": 5,
             "fragment_retries": 5,
-            "cookiefile": YTDLP_COOKIE_FILE,
         }
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([s.original_url])
+        
+        if Path(YTDLP_COOKIE_FILE).is_file():
+            opts["cookiefile"] = YTDLP_COOKIE_FILE
+            log("INFO", f"{s.video_id}: yt-dlp using cookie file {YTDLP_COOKIE_FILE}")
+        else:
+            log("WARNING", f"{s.video_id}: cookie file not found at {YTDLP_COOKIE_FILE}")
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    ydl.download([s.original_url])
 
         candidates = sorted(s.cache_dir.glob("full.*"), key=lambda p: p.stat().st_size, reverse=True)
         candidates = [p for p in candidates if p.suffix.lower() not in (".part", ".ytdl")]
@@ -925,14 +938,30 @@ def resolve_and_start(url):
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    server_version = "LocalYouTubePlayer/12"
+    server_version = "LocalYouTubePlayer/13"
 
     def log_message(self, fmt, *args):
         pass
 
+    def _cors_headers(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Range")
+        self.send_header(
+            "Access-Control-Expose-Headers",
+            "Content-Length, Content-Range, Accept-Ranges"
+        )
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._cors_headers()
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def _json(self, obj, code=200):
         body = json.dumps(obj).encode()
         self.send_response(code)
+        self._cors_headers()
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
@@ -990,6 +1019,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _index(self):
         body = (Path(__file__).resolve().parent / "index.html").read_bytes()
         self.send_response(200)
+        self._cors_headers()
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -1096,6 +1126,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             end = min(end, total - 1)
             if start < 0 or start >= total or start > end:
                 self.send_response(416)
+                self._cors_headers()
                 self.send_header("Content-Range", f"bytes */{total}")
                 self.end_headers()
                 return
@@ -1103,6 +1134,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         length = end - start + 1
         ctype = "video/mp4"
         self.send_response(code)
+        self._cors_headers()
         self.send_header("Content-Type", ctype)
         self.send_header("Accept-Ranges", "bytes")
         self.send_header("Content-Length", str(length))
